@@ -1,0 +1,50 @@
+{
+  "name": "weather-app",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "type": "module",
+  "scripts": {
+    "dev": "nx run-many -t dev",
+    "build": "nx run-many -t build",
+    "check-types": "nx run-many -t check-types",
+    "dev:web": "nx run-many -t dev --projects=web",
+    "dev:server": "nx run-many -t dev --projects=server",
+    "db:push": "nx run-many -t db:push --projects=@weather-app/db",
+    "db:studio": "nx run-many -t db:studio --projects=@weather-app/db",
+    "db:generate": "nx run-many -t db:generate --projects=@weather-app/db",
+    "db:migrate": "nx run-many -t db:migrate --projects=@weather-app/db",
+    "db:start": "docker compose up -d postgres",
+    "db:watch": "docker compose up postgres",
+    "db:stop": "docker compose stop postgres",
+    "db:down": "docker compose down postgres",
+    "docker:build": "docker compose build",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "check": "biome check --write .",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "@weather-app/env": "workspace:*",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.16",
+    "@types/node": "^22.13.14",
+    "@weather-app/config": "workspace:*",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.7",
+    "nx": "^22.7.5",
+    "typescript": "catalog:"
+  },
+  "lint-staged": {
+    "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc}": [
+      "biome check --write ."
+    ]
+  },
+  "packageManager": "pnpm@10.32.1"
+}
