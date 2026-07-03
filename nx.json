@@ -23,6 +23,10 @@
       "dependsOn": ["^check-types"],
       "inputs": ["default", "^default"]
     },
+    "check": {
+      "inputs": ["default", "^default"],
+      "cache": true
+    },
     "dev": {
       "cache": false
     },
@@ -50,5 +54,6 @@
     "db:down": {
       "cache": false
     }
-  }
+  },
+  "analytics": false
 }

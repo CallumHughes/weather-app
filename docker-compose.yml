@@ -14,7 +14,7 @@ services:
       - path: apps/web/.env
         required: false
     environment:
-      NEXT_PUBLIC_SERVER_URL: http://server:3000
+      INTERNAL_SERVER_URL: http://server:3000
     depends_on:
       server:
         condition: service_healthy

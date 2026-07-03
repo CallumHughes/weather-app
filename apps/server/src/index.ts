@@ -2,7 +2,7 @@ import fastifyCors from "@fastify/cors";
 import { auth } from "@weather-app/auth";
 import { env } from "@weather-app/env/server";
 import { initLogger } from "evlog";
-import { createAuthMiddleware, type BetterAuthInstance } from "evlog/better-auth";
+import { type BetterAuthInstance, createAuthMiddleware } from "evlog/better-auth";
 import { evlog, useLogger } from "evlog/fastify";
 import Fastify from "fastify";
 
@@ -50,7 +50,9 @@ fastify.route({
       });
       const response = await auth.handler(req);
       reply.status(response.status);
-      response.headers.forEach((value, key) => reply.header(key, value));
+      response.headers.forEach((value, key) => {
+        reply.header(key, value);
+      });
       reply.send(response.body ? await response.text() : null);
     } catch (error) {
       fastify.log.error({ err: error }, "Authentication Error:");
