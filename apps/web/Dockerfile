@@ -8,8 +8,6 @@ ENV DATABASE_URL=postgresql://build:build@localhost:5432/build
 COPY . .
 RUN --mount=type=cache,target=/pnpm-store pnpm install --store-dir /pnpm-store
 
-ARG NEXT_PUBLIC_SERVER_URL
-ENV NEXT_PUBLIC_SERVER_URL=${NEXT_PUBLIC_SERVER_URL}
 ENV NODE_ENV=production
 RUN cd apps/web && pnpm run build
 
