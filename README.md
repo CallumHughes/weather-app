@@ -2,6 +2,11 @@
 
 This project was created with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack), a modern TypeScript stack that combines Next.js, Fastify, and more.
 
+## Documentation
+
+- [REQUIREMENTS.md](REQUIREMENTS.md) — MoSCoW-prioritised requirements and their current status
+- [ARCHITECTURE.md](ARCHITECTURE.md) — design decisions, trade-offs, assumptions, and future improvements
+
 ## Features
 
 - **TypeScript** - For type safety and improved developer experience
@@ -25,24 +30,70 @@ First, install the dependencies:
 pnpm install
 ```
 
+## Environment Variables
+
+Each app reads its own `.env` file. Create them before first run.
+
+`apps/server/.env`:
+
+```dotenv
+DATABASE_URL=postgresql://postgres:password@localhost:5432/weather-app
+BETTER_AUTH_SECRET=<generated secret, see below>
+BETTER_AUTH_URL=http://localhost:3000
+CORS_ORIGIN=http://localhost:3001
+```
+
+`apps/web/.env`:
+
+```dotenv
+INTERNAL_SERVER_URL=http://localhost:3000
+```
+
+All variables are validated at startup by the schemas in `packages/env` — the apps fail fast with a clear error if anything is missing or malformed.
+
+### Generating `BETTER_AUTH_SECRET`
+
+Better-Auth uses this secret to sign session cookies. It must be at least 32 characters and should be unique per environment (never reuse the local one in production):
+
+```bash
+openssl rand -base64 32
+```
+
+If you don't have `openssl` available:
+
+```bash
+node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
+```
+
+Paste the output as the value of `BETTER_AUTH_SECRET` in `apps/server/.env`.
+
 ## Database Setup
 
 This project uses PostgreSQL with Prisma.
 
-1. Make sure you have a PostgreSQL database set up.
-2. Update your `apps/server/.env` file with your PostgreSQL connection details.
-
-3. Apply the schema to your database:
+1. Start a local PostgreSQL instance (uses Docker, matches the `DATABASE_URL` above):
 
 ```bash
-pnpm run db:push
+pnpm run db:start
 ```
 
-Then, run the development server:
+Alternatively, point `DATABASE_URL` in `apps/server/.env` at any PostgreSQL instance you already have.
+
+2. Apply the database migrations:
 
 ```bash
-pnpm run dev
+pnpm nx db:migrate @weather-app/db
 ```
+
+This runs `prisma migrate dev`: it applies all pending migrations from `packages/db/prisma/migrations` and regenerates the Prisma client. It is also the command to use when changing the schema during development, as it creates a new migration file. In production, migrations are applied with `prisma migrate deploy` (`db:migrate:deploy` in `packages/db`), which only applies existing migrations.
+
+Then, run the development servers (web + API):
+
+```bash
+pnpm nx run-many -t dev
+```
+
+Or start a single app with `pnpm nx dev web` / `pnpm nx dev server`.
 
 Open [http://localhost:3001](http://localhost:3001) in your browser to see the web application.
 The API is running at [http://localhost:3000](http://localhost:3000).
@@ -104,19 +155,36 @@ weather-app/
 │   └── db/          # Database schema & queries
 ```
 
-## Available Scripts
+## Common Commands
 
-- `pnpm run dev`: Start all applications in development mode
-- `pnpm run build`: Build all applications
-- `pnpm run dev:web`: Start only the web application
-- `pnpm run dev:server`: Start only the server
-- `pnpm run check-types`: Check TypeScript types across all apps
-- `pnpm run db:push`: Push schema changes to database
-- `pnpm run db:generate`: Generate database client/types
-- `pnpm run db:migrate`: Run database migrations
-- `pnpm run db:studio`: Open database studio UI
+Tasks are orchestrated by [Nx](https://nx.dev) (with computation caching, so unchanged projects are not rebuilt/rechecked). The root `package.json` provides short `pnpm run` aliases for the most common ones.
+
+### Development
+
+| Task | Nx command | Alias |
+|------|------------|-------|
+| Start all apps in dev mode | `pnpm nx run-many -t dev` | `pnpm run dev` |
+| Start only the web app | `pnpm nx dev web` | `pnpm run dev:web` |
+| Start only the API server | `pnpm nx dev server` | `pnpm run dev:server` |
+| Build all apps | `pnpm nx run-many -t build` | `pnpm run build` |
+| Type-check all projects | `pnpm nx run-many -t check-types` | `pnpm run check-types` |
+
+### Database
+
+| Task | Nx command | Alias |
+|------|------------|-------|
+| Create/apply migrations (`prisma migrate dev`) | `pnpm nx db:migrate @weather-app/db` | `pnpm run db:migrate` |
+| Generate Prisma client/types | `pnpm nx db:generate @weather-app/db` | `pnpm run db:generate` |
+| Open Prisma Studio | `pnpm nx db:studio @weather-app/db` | `pnpm run db:studio` |
+
+The local PostgreSQL container is managed with Docker Compose (not Nx): `pnpm run db:start` / `pnpm run db:stop`.
+
+### Other
+
 - `pnpm run check`: Run Biome formatting and linting
 - `pnpm run docker:build`: Build the Docker Compose images
 - `pnpm run docker:up`: Build and start the Docker Compose stack
 - `pnpm run docker:logs`: Tail logs from the Docker Compose stack
 - `pnpm run docker:down`: Stop the Docker Compose stack
+
+Nx extras: `pnpm nx graph` visualises the project/task dependency graph; `pnpm nx show projects` lists all workspace projects.
