@@ -159,6 +159,14 @@ The application currently connects with the database's main credentials. That is
 
 **Health check**: `GET /health` (in `apps/server/src/lib/health.ts`) runs a `SELECT 1` DB ping bounded by a 2 s timeout, returning 200 `{ status: "ok" }` or 503 `{ status: "degraded", checks: { database: "down" } }`. The 503 body intentionally does **not** use the error envelope: it is a machine-readable health document for Docker/Railway probes, not a client-facing API error. The route is exempt from rate limiting (it is polled), its responses are never cached, and the docker-compose healthcheck targets it (the Railway healthcheck path should be set to `/health` in the service settings).
 
+### API documentation (OpenAPI generated from the route schemas)
+
+The OpenAPI 3.1 spec is **generated from the zod route schemas** — the same schemas that validate and serialize every request/response at runtime — via `@fastify/swagger` + `fastify-type-provider-zod`'s transforms (registered in `buildApp()`, config in `apps/server/src/lib/openapi.ts`). Docs therefore cannot drift from the implementation: the spec *is* the route contract.
+
+- **Committed spec + drift test standing in for CI**: `pnpm run docs:generate` writes the spec to `apps/fumadocs/openapi/weather-api.json` (built with in-memory fakes — no DB, network, or env needed) and regenerates the Fumadocs MDX pages from it. A drift test (`apps/server/src/openapi.test.ts`) rebuilds the spec in-memory and compares it against the committed file, so a schema change without regeneration fails the pre-commit suite — the same stopgap-for-CI role as the pre-commit hooks above.
+- **Rendered by Fumadocs, not by the server**: the Fastify app exposes no live docs UI; the docs app (`apps/fumadocs`, `pnpm nx dev fumadocs` on port 4000) renders the committed spec with `fumadocs-openapi`, plus hand-written pages for authentication, errors, and rate limits. `/api/auth/*` is excluded from the spec — it is Better-Auth's surface, documented by a hand-written page (Better-Auth's own OpenAPI plugin is the future path for generating those).
+- **The docs app is not deployed** — local/dev only for now; deploying it belongs with the CI improvement below.
+
 ## Assumptions
 
 - Small user base and a single deployment region; no high-availability requirements.
@@ -171,14 +179,13 @@ The application currently connects with the database's main credentials. That is
 
 With more time, in rough priority order:
 
-1. **CI pipeline** (GitHub Actions): lint, type-check, and test on every push — including DB integration tests for the Prisma cache/history implementations against a PostgreSQL service container (currently exercised via stubs only).
-2. **OpenAPI documentation** generated from the Fastify route schemas, so docs cannot drift from the implementation.
-3. **Forecast and favourites** — extend the weather provider client and add a favourites model reusing the protected-endpoint pattern from search history.
-4. **E2E coverage** — a Playwright happy path (register → search → see weather → revisit history).
-5. **Observability** — metrics (request duration, upstream latency, cache hit rate) on top of the existing structured logging.
-6. **Password reset / email verification** to round out the auth story.
-7. **Cache maintenance** — a periodic sweep of long-expired `weather_cache` rows (cleanup today is lazy, on read).
-8. **Strict CSP for the web app** — the API ships helmet defaults, but a meaningful `Content-Security-Policy` for the Next.js app needs nonce/hash work around its inline runtime.
+1. **CI pipeline** (GitHub Actions): lint, type-check, and test on every push — including DB integration tests for the Prisma cache/history implementations against a PostgreSQL service container (currently exercised via stubs only) — plus deploying the API docs app alongside it.
+2. **Forecast and favourites** — extend the weather provider client and add a favourites model reusing the protected-endpoint pattern from search history.
+3. **E2E coverage** — a Playwright happy path (register → search → see weather → revisit history).
+4. **Observability** — metrics (request duration, upstream latency, cache hit rate) on top of the existing structured logging.
+5. **Password reset / email verification** to round out the auth story.
+6. **Cache maintenance** — a periodic sweep of long-expired `weather_cache` rows (cleanup today is lazy, on read).
+7. **Strict CSP for the web app** — the API ships helmet defaults, but a meaningful `Content-Security-Policy` for the Next.js app needs nonce/hash work around its inline runtime.
 
 ## Scaling approach
 

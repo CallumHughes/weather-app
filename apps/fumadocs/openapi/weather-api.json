@@ -1,0 +1,523 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Weather App API",
+    "version": "1.0.0",
+    "description": "REST API for current weather by location and per-user search history.\n\nBase URL model: in production the API is served same-origin under `/api/*` via the Next.js BFF reverse proxy (session cookies stay first-party); in local development the Fastify server is reached directly at `http://localhost:3000`.\n\nAll non-2xx responses use the shared `ErrorEnvelope` shape. Authentication endpoints under `/api/auth/*` are handled by Better-Auth and are documented separately (see the Authentication page)."
+  },
+  "components": {
+    "schemas": {
+      "ErrorEnvelope": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "Machine-readable error code (VALIDATION_ERROR, UNAUTHENTICATED, NOT_FOUND, LOCATION_NOT_FOUND, UPSTREAM_ERROR, UPSTREAM_TIMEOUT, RATE_LIMITED, INTERNAL_ERROR)"
+              },
+              "message": {
+                "type": "string",
+                "description": "Human-readable, client-safe explanation"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "additionalProperties": false,
+        "description": "Standard error envelope returned by every non-2xx API response."
+      }
+    }
+  },
+  "paths": {
+    "/api/v1/weather": {
+      "get": {
+        "operationId": "getCurrentWeather",
+        "summary": "Get current weather for a location",
+        "tags": [
+          "Weather"
+        ],
+        "description": "Resolves a free-text location (city name, optionally with country/state) via geocoding and returns the current weather. Responses are served from a server-side cache where possible — the `x-cache` response header reports the outcome: `HIT` (served from cache), `MISS` (fetched upstream) or `STALE` (upstream failed, an expired cache entry was served instead). When a signed-in session cookie is sent, the successful search is recorded in the user's search history; anonymous searches are never stored.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "in": "query",
+            "name": "location",
+            "required": true,
+            "description": "Free-text place query, e.g. \"London\", \"London,GB\" or \"Springfield,US-IL\". Resolved by geocoding; ambiguous names resolve to the best match."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current weather for the resolved location.",
+            "headers": {
+              "x-cache": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "HIT",
+                    "MISS",
+                    "STALE"
+                  ]
+                },
+                "description": "Cache outcome: HIT — served from the weather cache; MISS — fetched upstream; STALE — upstream failed, an expired cache entry was served instead."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "country": {
+                          "type": "string",
+                          "description": "ISO 3166 country code, e.g. GB"
+                        },
+                        "state": {
+                          "description": "State/region, when the geocoder provides one",
+                          "type": "string"
+                        },
+                        "lat": {
+                          "type": "number"
+                        },
+                        "lon": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "country",
+                        "lat",
+                        "lon"
+                      ],
+                      "additionalProperties": false,
+                      "description": "The place the query resolved to"
+                    },
+                    "current": {
+                      "type": "object",
+                      "properties": {
+                        "temperatureC": {
+                          "type": "number",
+                          "description": "Air temperature in °C"
+                        },
+                        "feelsLikeC": {
+                          "type": "number",
+                          "description": "Perceived temperature in °C"
+                        },
+                        "humidityPct": {
+                          "type": "number",
+                          "description": "Relative humidity in %"
+                        },
+                        "windSpeedMs": {
+                          "type": "number",
+                          "description": "Wind speed in m/s"
+                        },
+                        "condition": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "number",
+                              "description": "Weather condition id (provider taxonomy)"
+                            },
+                            "main": {
+                              "type": "string",
+                              "description": "Condition group, e.g. \"Clouds\""
+                            },
+                            "description": {
+                              "type": "string",
+                              "description": "Human-readable condition, e.g. \"scattered clouds\""
+                            },
+                            "icon": {
+                              "type": "string",
+                              "description": "Icon code for the condition"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "main",
+                            "description",
+                            "icon"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "observedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                          "description": "When the reading was observed (ISO 8601, UTC)"
+                        }
+                      },
+                      "required": [
+                        "temperatureC",
+                        "feelsLikeC",
+                        "humidityPct",
+                        "windSpeedMs",
+                        "condition",
+                        "observedAt"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "location",
+                    "current"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`): bad `location` value.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No place matched the query (`LOCATION_NOT_FOUND`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (`RATE_LIMITED`) — see `retry-after`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error (`INTERNAL_ERROR`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream weather provider failed (`UPSTREAM_ERROR`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream weather provider timed out (`UPSTREAM_TIMEOUT`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/history": {
+      "get": {
+        "operationId": "listSearchHistory",
+        "summary": "List recent searches",
+        "tags": [
+          "History"
+        ],
+        "description": "Returns the signed-in user's most recent weather searches (newest first, at most 10). Requires a Better-Auth session cookie — see the Authentication page.",
+        "responses": {
+          "200": {
+            "description": "The user's recent searches, newest first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "description": "Entry id — pass to DELETE /api/v1/history/{id}"
+                      },
+                      "query": {
+                        "type": "string",
+                        "description": "The free-text location the user searched for"
+                      },
+                      "resolvedName": {
+                        "type": "string",
+                        "description": "Place name the query resolved to"
+                      },
+                      "country": {
+                        "type": "string",
+                        "description": "ISO 3166 country code, e.g. GB"
+                      },
+                      "state": {
+                        "description": "State/region, when the geocoder provides one",
+                        "type": "string"
+                      },
+                      "lat": {
+                        "type": "number"
+                      },
+                      "lon": {
+                        "type": "number"
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                        "description": "When the search was last made (ISO 8601, UTC)"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "query",
+                      "resolvedName",
+                      "country",
+                      "lat",
+                      "lon",
+                      "createdAt"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session (`UNAUTHENTICATED`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (`RATE_LIMITED`) — see `retry-after`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error (`INTERNAL_ERROR`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/history/{id}": {
+      "delete": {
+        "operationId": "deleteSearchHistoryEntry",
+        "summary": "Delete a search history entry",
+        "tags": [
+          "History"
+        ],
+        "description": "Deletes one of the signed-in user's search history entries. Entries that do not exist — or belong to another user — respond 404 (ownership is never revealed). Requires a Better-Auth session cookie — see the Authentication page.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "History entry id (from GET /api/v1/history)"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The entry was deleted. No body."
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`): bad `id` value.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session (`UNAUTHENTICATED`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such entry for this user (`NOT_FOUND`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (`RATE_LIMITED`) — see `retry-after`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error (`INTERNAL_ERROR`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "getHealth",
+        "summary": "Service health",
+        "tags": [
+          "Health"
+        ],
+        "description": "Machine-readable health document for infrastructure probes (Docker/Railway). Runs a database liveness ping bounded by a short timeout. Deliberately not on the error envelope: a 503 here describes service state, not a client error. Exempt from rate limiting.",
+        "responses": {
+          "200": {
+            "description": "Service healthy: the database ping succeeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service degraded: the database is unreachable or timed out.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "degraded"
+                      ]
+                    },
+                    "checks": {
+                      "type": "object",
+                      "properties": {
+                        "database": {
+                          "type": "string",
+                          "enum": [
+                            "down"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "database"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "checks"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Local development (Fastify directly)"
+    },
+    {
+      "url": "/",
+      "description": "Production (same-origin via the Next.js BFF proxy)"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Weather",
+      "description": "Current weather lookups"
+    },
+    {
+      "name": "History",
+      "description": "Per-user search history (requires a session)"
+    },
+    {
+      "name": "Health",
+      "description": "Service health for infrastructure probes"
+    }
+  ]
+}

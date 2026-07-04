@@ -27,7 +27,9 @@
       "!**/wrangler.jsonc",
       "!**/.source",
       "!**/convex/_generated",
-      "!**/prisma/generated"
+      "!**/prisma/generated",
+      "!apps/fumadocs/content/docs/api",
+      "!apps/fumadocs/openapi"
     ]
   },
   "formatter": {

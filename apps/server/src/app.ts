@@ -1,6 +1,7 @@
 import fastifyCors from "@fastify/cors";
 import fastifyHelmet from "@fastify/helmet";
 import fastifyRateLimit from "@fastify/rate-limit";
+import fastifySwagger from "@fastify/swagger";
 import { auth } from "@weather-app/auth";
 import prisma from "@weather-app/db";
 import { env } from "@weather-app/env/server";
@@ -20,6 +21,7 @@ import {
 import { type CacheStore, createSafeCacheStore, PrismaCacheStore } from "@/lib/cache";
 import { errorHandler } from "@/lib/errors";
 import { type DbPing, healthRoutes } from "@/lib/health";
+import { openApiOptions } from "@/lib/openapi";
 import {
   RATE_LIMIT_MAX,
   RATE_LIMIT_TIME_WINDOW_MS,
@@ -88,6 +90,11 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   fastify.setSerializerCompiler(serializerCompiler);
   fastify.setErrorHandler(errorHandler);
 
+  // OpenAPI document derived from the zod route schemas. Doc-only: no live
+  // docs UI is exposed — `app.swagger()` is called by the spec-generation
+  // script (`src/scripts/generate-openapi.ts`) and the spec-drift test.
+  fastify.register(fastifySwagger, openApiOptions);
+
   fastify.register(evlog);
   fastify.addHook("preHandler", async (request) => {
     await identifyUser(useLogger(), request.headers, request.url);
@@ -111,6 +118,9 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     instance.route({
       method: ["GET", "POST"],
       url: "/api/auth/*",
+      // Excluded from the OpenAPI spec: this is a pass-through proxy to
+      // Better-Auth, covered by the hand-written Authentication docs page.
+      schema: { hide: true },
       async handler(request, reply) {
         try {
           const url = new URL(request.url, `http://${request.headers.host}`);
@@ -177,7 +187,8 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   // Plugin scope for the same reason as the auth route above: keep the
   // bare OK route under the global rate limit.
   fastify.register(async (instance) => {
-    instance.get("/", async () => {
+    // `hide` keeps this internal liveness convenience out of the OpenAPI spec.
+    instance.get("/", { schema: { hide: true } }, async () => {
       return "OK";
     });
   });

@@ -1,4 +1,18 @@
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
+
+/** 200 body: the service (including its database) is up. */
+export const healthOkSchema = z.object({
+  status: z.literal("ok"),
+});
+
+/** 503 body: the service is degraded (database unreachable). */
+export const healthDegradedSchema = z.object({
+  status: z.literal("degraded"),
+  checks: z.object({
+    database: z.literal("down"),
+  }),
+});
 
 /** The DB ping must answer well within a health-poll interval. */
 export const HEALTH_DB_PING_TIMEOUT_MS = 2_000;
@@ -24,7 +38,26 @@ export async function healthRoutes(
 ): Promise<void> {
   const timeoutMs = options.pingTimeoutMs ?? HEALTH_DB_PING_TIMEOUT_MS;
 
-  fastify.get("/health", { config: { rateLimit: false } }, async (request, reply) => {
+  const schema = {
+    tags: ["Health"],
+    summary: "Service health",
+    description:
+      "Machine-readable health document for infrastructure probes (Docker/Railway). " +
+      "Runs a database liveness ping bounded by a short timeout. Deliberately not on " +
+      "the error envelope: a 503 here describes service state, not a client error. " +
+      "Exempt from rate limiting.",
+    operationId: "getHealth",
+    response: {
+      200: healthOkSchema,
+      503: healthDegradedSchema,
+    },
+    responseDocs: {
+      200: { description: "Service healthy: the database ping succeeded." },
+      503: { description: "Service degraded: the database is unreachable or timed out." },
+    },
+  };
+
+  fastify.get("/health", { config: { rateLimit: false }, schema }, async (request, reply) => {
     if (await isDatabaseUp(options.dbPing, timeoutMs)) {
       return { status: "ok" };
     }

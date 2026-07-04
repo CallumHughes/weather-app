@@ -23,11 +23,46 @@ export async function weatherRoutes(
     method: "GET",
     url: "/weather",
     schema: {
+      tags: ["Weather"],
+      summary: "Get current weather for a location",
+      description:
+        "Resolves a free-text location (city name, optionally with country/state) via " +
+        "geocoding and returns the current weather. Responses are served from a server-side " +
+        "cache where possible — the `x-cache` response header reports the outcome: `HIT` " +
+        "(served from cache), `MISS` (fetched upstream) or `STALE` (upstream failed, an " +
+        "expired cache entry was served instead). When a signed-in session cookie is sent, " +
+        "the successful search is recorded in the user's search history; anonymous searches " +
+        "are never stored.",
+      operationId: "getCurrentWeather",
       querystring: weatherQuerySchema,
       response: {
         200: weatherResponseSchema,
-        "4xx": errorEnvelopeSchema,
-        "5xx": errorEnvelopeSchema,
+        400: errorEnvelopeSchema,
+        404: errorEnvelopeSchema,
+        429: errorEnvelopeSchema,
+        500: errorEnvelopeSchema,
+        502: errorEnvelopeSchema,
+        504: errorEnvelopeSchema,
+      },
+      responseDocs: {
+        200: {
+          description: "Current weather for the resolved location.",
+          headers: {
+            "x-cache": {
+              type: "string",
+              enum: ["HIT", "MISS", "STALE"],
+              description:
+                "Cache outcome: HIT — served from the weather cache; MISS — fetched " +
+                "upstream; STALE — upstream failed, an expired cache entry was served instead.",
+            },
+          },
+        },
+        400: { description: "Invalid request (`VALIDATION_ERROR`): bad `location` value." },
+        404: { description: "No place matched the query (`LOCATION_NOT_FOUND`)." },
+        429: { description: "Rate limit exceeded (`RATE_LIMITED`) — see `retry-after`." },
+        500: { description: "Unexpected server error (`INTERNAL_ERROR`)." },
+        502: { description: "The upstream weather provider failed (`UPSTREAM_ERROR`)." },
+        504: { description: "The upstream weather provider timed out (`UPSTREAM_TIMEOUT`)." },
       },
     },
     async handler(request, reply) {

@@ -1,13 +1,40 @@
 ---
-title: Hello World
-description: Your first document
+title: Overview
+description: Weather App API — current weather by location, with per-user search history
 ---
 
-Welcome to the docs! You can start writing documents in `/content/docs`.
+The Weather App API is a small REST API behind the weather-app web client. It
+returns current weather for a free-text location and manages the signed-in
+user's search history. Responses are JSON; errors always use the shared
+[error envelope](/docs/errors).
 
-## What is Next?
+## Base URLs
+
+| Environment | Base URL | Notes |
+| --- | --- | --- |
+| Production | same origin as the web app, under `/api/*` | The Next.js BFF reverse-proxies to the Fastify API, so session cookies stay first-party |
+| Local development | `http://localhost:3000` | Fastify directly (`pnpm nx dev server`) |
+
+All documented endpoints are versioned under `/api/v1` (except `/health`,
+which is unversioned for infrastructure probes).
+
+## Endpoints
 
 <Cards>
-  <Card title="Learn more about Next.js" href="https://nextjs.org/docs" />
-  <Card title="Learn more about Fumadocs" href="https://fumadocs.dev" />
+  <Card title="Get current weather" href="/docs/api/getCurrentWeather" />
+  <Card title="List recent searches" href="/docs/api/listSearchHistory" />
+  <Card
+    title="Delete a search history entry"
+    href="/docs/api/deleteSearchHistoryEntry"
+  />
+  <Card title="Service health" href="/docs/api/getHealth" />
 </Cards>
+
+## More
+
+- [Authentication](/docs/authentication) — session cookies via Better-Auth
+- [Errors](/docs/errors) — the error envelope and all error codes
+- [Rate limits](/docs/rate-limits) — request quotas and 429 behaviour
+
+For local setup see the repository `README.md`; for design decisions and
+trade-offs see `ARCHITECTURE.md`.

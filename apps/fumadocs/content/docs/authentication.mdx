@@ -1,0 +1,43 @@
+---
+title: Authentication
+description: Session-cookie authentication via Better-Auth through the BFF proxy
+---
+
+The API uses **session cookies**, not API keys or bearer tokens. Sessions are
+managed by [Better-Auth](https://better-auth.com); the Fastify server proxies
+everything under `/api/auth/*` to it.
+
+## How it works
+
+1. Register or sign in through the Better-Auth endpoints, e.g.
+   `POST /api/auth/sign-up/email` or `POST /api/auth/sign-in/email`
+   (the web app does this via its auth forms).
+2. Better-Auth sets a session cookie: `httpOnly`, `sameSite=lax` — it is never
+   readable from JavaScript.
+3. Send the cookie on subsequent requests (browsers do this automatically on
+   the same origin — which is exactly why production serves the API
+   same-origin through the Next.js BFF proxy).
+
+## Which endpoints need a session?
+
+| Endpoint | Session |
+| --- | --- |
+| `GET /api/v1/weather` | Optional — anonymous works; with a session the search is recorded in history |
+| `GET /api/v1/history` | Required |
+| `DELETE /api/v1/history/{id}` | Required |
+| `GET /health` | None |
+
+Guarded endpoints without a valid session respond `401` with the standard
+[error envelope](/docs/errors) and code `UNAUTHENTICATED`:
+
+```json
+{ "error": { "code": "UNAUTHENTICATED", "message": "You must be signed in to do that." } }
+```
+
+## The auth endpoints themselves
+
+The `/api/auth/*` routes are Better-Auth's own surface (email/password
+sign-up, sign-in, sign-out, session), proxied as-is — they are deliberately
+not part of the generated OpenAPI spec. Better-Auth ships its own OpenAPI
+plugin; adopting it to document those endpoints is a planned future
+improvement.
