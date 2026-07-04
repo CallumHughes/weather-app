@@ -15,7 +15,7 @@ Core functionality and the items the brief lists as required.
 | M3 | Back-end exposes a RESTful API that acts as the intermediary to a public weather API (the browser never calls the weather provider directly) | ✅ Done (`GET /api/v1/weather`, OpenWeather called server-side only) |
 | M4 | API returns meaningful HTTP status codes and error messages (invalid input, unknown location, upstream failure) | ✅ Done (consistent `{ error: { code, message } }` envelope: 400/401/404/502/504/500) |
 | M5 | Input validation and sanitisation on all endpoints | ✅ Done (zod schemas via fastify-type-provider-zod) |
-| M6 | Rate limiting / request throttling on the API | ⬜ To do |
+| M6 | Rate limiting / request throttling on the API | ✅ Done (`@fastify/rate-limit`: 100 req/min per client IP, 429 on the standard error envelope with `retry-after`/`x-ratelimit-*` headers; `/health` exempt; see ARCHITECTURE.md → API hardening) |
 | M7 | Request and error logging | ✅ Done (structured logging via evlog on both apps) |
 | M8 | At least one data persistence feature (see choice above) | ✅ Done (per-user search history + PostgreSQL TTL weather cache; see ARCHITECTURE.md → Data and persistence) |
 | M9 | Front-end handles loading states and error states (invalid location, API failure) | ✅ Done (empty/loading/not-found/error/success states, retry on failure) |
@@ -38,8 +38,8 @@ High-value items the brief marks recommended, or that are cheap now and expensiv
 | S4 | Per-user search history: recorded on search, viewable, re-runnable | ✅ Done (recorded server-side for signed-in searches with consecutive-duplicate dedupe + 50-row cap; Recent searches panel with click-to-rerun and delete) |
 | S5 | Server-side weather cache with TTL to reduce external API calls | ✅ Done (PostgreSQL TTL cache: 10 min weather / 24 h geocode, `x-cache` header, stale-on-upstream-failure) |
 | S6 | API versioning (`/api/v1/...`) — cheap now, breaking change later | ✅ Done (weather routes live under `/api/v1`) |
-| S7 | Health check endpoint (used by Docker/Railway health checks) | 🚧 In progress (bare `/` route exists; formalise as `/health`) |
-| S8 | Security headers (helmet or equivalent) | ⬜ To do |
+| S7 | Health check endpoint (used by Docker/Railway health checks) | ✅ Done (`GET /health` with a 2 s-bounded DB ping: 200 `{ status: "ok" }` / 503 `{ status: "degraded", checks: { database: "down" } }`; docker-compose healthcheck points at it) |
+| S8 | Security headers (helmet or equivalent) | ✅ Done (`@fastify/helmet` defaults on the API; nosniff / `X-Frame-Options: DENY` / `Referrer-Policy` on the Next.js app) |
 | S9 | CORS configuration | ✅ Done |
 | S10 | Deployed and accessible online | ✅ Done (Railway) |
 | S11 | Docker Compose setup for running the full stack locally | ✅ Done |

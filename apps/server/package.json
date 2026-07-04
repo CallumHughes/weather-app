@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@fastify/cors": "^11.0.1",
+    "@fastify/helmet": "^13.0.2",
+    "@fastify/rate-limit": "^11.1.0",
     "@weather-app/auth": "workspace:*",
     "@weather-app/db": "workspace:*",
     "@weather-app/env": "workspace:*",

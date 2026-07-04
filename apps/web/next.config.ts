@@ -10,6 +10,20 @@ const nextConfig: NextConfig = {
   reactCompiler: true,
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../.."),
+  async headers() {
+    // Minimal hardening header set. A strict CSP is deliberately out of
+    // scope (Next's inline runtime makes it a project of its own).
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        ],
+      },
+    ];
+  },
   async rewrites() {
     if (!internalServerUrl) return [];
     // forward the server API through the web app's own
