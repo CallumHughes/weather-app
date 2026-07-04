@@ -1,0 +1,35 @@
+---
+title: Rate limits
+description: Request quotas, 429 responses, and rate-limit headers
+---
+
+The API allows **100 requests per minute per client IP**, across all
+endpoints. `GET /health` is exempt (it is polled by infrastructure).
+
+## When you exceed the limit
+
+Requests over the quota get a `429` with the standard
+[error envelope](/docs/errors):
+
+```json
+{
+  "error": {
+    "code": "RATE_LIMITED",
+    "message": "Too many requests, please try again shortly."
+  }
+}
+```
+
+## Headers
+
+Every rate-limited response carries the standard headers:
+
+| Header | Meaning |
+| --- | --- |
+| `x-ratelimit-limit` | Requests allowed per window (100) |
+| `x-ratelimit-remaining` | Requests left in the current window |
+| `x-ratelimit-reset` | Seconds until the window resets |
+| `retry-after` | On 429 only: seconds to wait before retrying |
+
+Clients should back off until `retry-after` elapses rather than retrying
+immediately.

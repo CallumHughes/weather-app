@@ -1,45 +1,58 @@
-# fumadocs
+# Weather App API docs
 
-This is a Next.js application generated with
-[Create Fumadocs](https://github.com/fuma-nama/fumadocs).
+API documentation for the weather-app API, built with [Fumadocs](https://fumadocs.dev). It serves hand-written guides (authentication, errors, rate limits) alongside an API reference that is **generated** from the OpenAPI spec — which is itself generated from the server's zod route schemas, so the reference cannot drift from the implementation.
 
-Run development server:
+See the repo-root [README](../../README.md) and [ARCHITECTURE.md](../../ARCHITECTURE.md) for the wider project.
+
+## Run it
+
+From the repo root:
 
 ```bash
-npm run dev
-# or
-pnpm dev
-# or
-yarn dev
+pnpm nx dev fumadocs
 ```
 
-Open http://localhost:3000 with your browser to see the result.
+Open http://localhost:4000 — the root route redirects to `/docs`.
 
-## Explore
+### Interactive playground
 
-In the project, you can see:
+The endpoint pages include a "try it" playground. Its default server is `/` (this origin): a rewrite in `next.config.mjs` forwards `/api/v1/*` and `/health` to the API using `INTERNAL_SERVER_URL` — set it in `apps/fumadocs/.env` locally (`http://localhost:3000`, with the server dev process running) and as a private-network reference variable on the deployed service. Without it the rewrite is disabled and the playground only works via the direct `localhost:3000` server entry. Session-guarded endpoints return a 401 envelope from the playground (sessions live on the web app's origin).
 
-- `lib/source.ts`: Code for content source adapter, [`loader()`](https://fumadocs.dev/docs/headless/source-api) provides the interface to access your content.
-- `lib/layout.shared.tsx`: Shared options for layouts, optional but preferred to keep.
+## Regenerating after API changes
 
-| Route                     | Description                                            |
-| ------------------------- | ------------------------------------------------------ |
-| `app/(home)`              | The route group for your landing page and other pages. |
-| `app/docs`                | The documentation layout and pages.                    |
-| `app/api/search/route.ts` | The Route Handler for search.                          |
+When a server route or schema changes, regenerate the spec and the API reference pages from the repo root:
 
-### Fumadocs MDX
+```bash
+pnpm run docs:generate
+```
 
-A `source.config.ts` config file has been included, you can customise different options like frontmatter schema.
+This runs two steps:
 
-Read the [Introduction](https://fumadocs.dev/docs/mdx) for further details.
+1. `apps/server` `openapi:generate` — builds the OpenAPI 3.1 spec from the live route schemas (no database or network needed) and writes it to `openapi/weather-api.json` in this app.
+2. `scripts/generate-api-docs.ts` (this app) — regenerates the MDX pages under `content/docs/api/` from that spec.
 
-## Learn More
+A drift test in `apps/server/src/openapi.test.ts` compares the committed spec against a freshly built one, so forgetting to regenerate fails the test suite (and therefore the pre-commit hook).
 
-To learn more about Next.js and Fumadocs, take a look at the following
-resources:
+## Content layout
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js
-  features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-- [Fumadocs](https://fumadocs.dev) - learn about Fumadocs
+| Path | What it is |
+|------|------------|
+| `content/docs/*.mdx` | Hand-written pages — edit freely |
+| `content/docs/meta.json` | Sidebar order |
+| `content/docs/api/**` | **Generated** API reference — never hand-edit; regenerate instead |
+| `openapi/weather-api.json` | **Generated** OpenAPI spec — never hand-edit; regenerate instead |
+
+Generated files are excluded from Biome.
+
+## Key files
+
+- `src/lib/openapi.ts` — fumadocs-openapi server config (points at the spec)
+- `src/components/api-page.tsx` — renders the interactive endpoint pages
+- `scripts/generate-api-docs.ts` — MDX generation from the spec
+- `source.config.ts` — Fumadocs MDX source configuration
+- `src/lib/shared.ts` — app name and repo links used by the nav
+
+## Learn more
+
+- [Fumadocs](https://fumadocs.dev) — framework documentation
+- [fumadocs-openapi](https://fumadocs.dev/docs/ui/openapi) — the OpenAPI integration

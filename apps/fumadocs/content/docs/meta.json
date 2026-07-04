@@ -1,0 +1,4 @@
+{
+  "title": "Weather App API",
+  "pages": ["index", "authentication", "errors", "rate-limits", "api"]
+}

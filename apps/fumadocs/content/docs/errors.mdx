@@ -1,0 +1,36 @@
+---
+title: Errors
+description: The error envelope and every error code the API returns
+---
+
+Every non-2xx response from `/api/v1/*` uses the same envelope (the
+`ErrorEnvelope` component in the OpenAPI spec):
+
+```json
+{
+  "error": {
+    "code": "LOCATION_NOT_FOUND",
+    "message": "We couldn't find that location."
+  }
+}
+```
+
+- `code` — stable, machine-readable; switch on this.
+- `message` — human-readable and safe to show to users; wording may change.
+
+The only exception is `GET /health`, which returns a machine-readable health
+document (not an error envelope) on 503 — it describes service state for
+infrastructure probes, not a client error.
+
+## Error codes
+
+| Code | Status | When |
+| --- | --- | --- |
+| `VALIDATION_ERROR` | 400 | The request failed schema validation, e.g. missing/empty `location`, or a `location` over 100 characters |
+| `UNAUTHENTICATED` | 401 | A guarded endpoint (`/api/v1/history*`) was called without a valid session cookie |
+| `NOT_FOUND` | 404 | The referenced resource does not exist — e.g. deleting a history entry that is missing **or belongs to another user** (indistinguishable on purpose) |
+| `LOCATION_NOT_FOUND` | 404 | Geocoding found no place matching the `location` query |
+| `RATE_LIMITED` | 429 | Too many requests from your IP — see [Rate limits](/docs/rate-limits) |
+| `UPSTREAM_ERROR` | 502 | The upstream weather provider returned an error; where possible the API serves stale cache instead of this |
+| `UPSTREAM_TIMEOUT` | 504 | The upstream weather provider timed out |
+| `INTERNAL_ERROR` | 500 | Unexpected server error; details are logged server-side, never leaked to clients |

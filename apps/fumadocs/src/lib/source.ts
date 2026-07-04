@@ -1,6 +1,7 @@
 import { docs } from "collections/server";
 import { loader } from "fumadocs-core/source";
 import { lucideIconsPlugin } from "fumadocs-core/source/lucide-icons";
+import { openapiPlugin } from "fumadocs-openapi/server";
 
 import { docsContentRoute, docsImageRoute, docsRoute } from "./shared";
 
@@ -8,7 +9,8 @@ import { docsContentRoute, docsImageRoute, docsRoute } from "./shared";
 export const source = loader({
   baseUrl: docsRoute,
   source: docs.toFumadocsSource(),
-  plugins: [lucideIconsPlugin()],
+  // openapiPlugin adds HTTP-method badges to generated API pages in the sidebar.
+  plugins: [lucideIconsPlugin(), openapiPlugin()],
 });
 
 export function getPageImage(page: (typeof source)["$inferPage"]) {

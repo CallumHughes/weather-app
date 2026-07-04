@@ -6,6 +6,7 @@ This project was created with [Better-T-Stack](https://github.com/AmanVarshney01
 
 - [REQUIREMENTS.md](REQUIREMENTS.md) — MoSCoW-prioritised requirements and their current status
 - [ARCHITECTURE.md](ARCHITECTURE.md) — design decisions, trade-offs, assumptions, and future improvements
+- API documentation — OpenAPI generated from the route schemas, rendered by the Fumadocs app: `pnpm nx dev fumadocs` → [http://localhost:4000/docs](http://localhost:4000/docs) (regenerate with `pnpm run docs:generate`)
 
 ## Features
 
@@ -164,7 +165,8 @@ The pre-commit hook runs lint/format on staged files (Biome via lint-staged) and
 weather-app/
 ├── apps/
 │   ├── web/         # Frontend application (Next.js)
-│   └── server/      # Backend API (Fastify)
+│   ├── server/      # Backend API (Fastify)
+│   └── fumadocs/    # API documentation site (Fumadocs)
 ├── packages/
 │   ├── ui/          # Shared shadcn/ui components and styles
 │   ├── auth/        # Authentication configuration & logic
@@ -182,6 +184,8 @@ Tasks are orchestrated by [Nx](https://nx.dev) (with computation caching, so unc
 | Start all apps in dev mode | `pnpm nx run-many -t dev` | `pnpm run dev` |
 | Start only the web app | `pnpm nx dev web` | `pnpm run dev:web` |
 | Start only the API server | `pnpm nx dev server` | `pnpm run dev:server` |
+| Start the API docs site ([http://localhost:4000](http://localhost:4000)) | `pnpm nx dev fumadocs` | — |
+| Regenerate API docs (OpenAPI spec + MDX) after API changes | — | `pnpm run docs:generate` |
 | Build all apps | `pnpm nx run-many -t build` | `pnpm run build` |
 | Type-check all projects | `pnpm nx run-many -t check-types` | `pnpm run check-types` |
 | Run all tests (Vitest) | `pnpm nx run-many -t test` | `pnpm run test` |

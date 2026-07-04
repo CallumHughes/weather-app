@@ -35,10 +35,23 @@ export async function historyRoutes(
     method: "GET",
     url: "/history",
     schema: {
+      tags: ["History"],
+      summary: "List recent searches",
+      description:
+        "Returns the signed-in user's most recent weather searches (newest first, at most " +
+        "10). Requires a Better-Auth session cookie — see the Authentication page.",
+      operationId: "listSearchHistory",
       response: {
         200: historyListResponseSchema,
-        "4xx": errorEnvelopeSchema,
-        "5xx": errorEnvelopeSchema,
+        401: errorEnvelopeSchema,
+        429: errorEnvelopeSchema,
+        500: errorEnvelopeSchema,
+      },
+      responseDocs: {
+        200: { description: "The user's recent searches, newest first." },
+        401: { description: "No valid session (`UNAUTHENTICATED`)." },
+        429: { description: "Rate limit exceeded (`RATE_LIMITED`) — see `retry-after`." },
+        500: { description: "Unexpected server error (`INTERNAL_ERROR`)." },
       },
     },
     async handler(request) {
@@ -50,12 +63,30 @@ export async function historyRoutes(
     method: "DELETE",
     url: "/history/:id",
     schema: {
+      tags: ["History"],
+      summary: "Delete a search history entry",
+      description:
+        "Deletes one of the signed-in user's search history entries. Entries that do not " +
+        "exist — or belong to another user — respond 404 (ownership is never revealed). " +
+        "Requires a Better-Auth session cookie — see the Authentication page.",
+      operationId: "deleteSearchHistoryEntry",
       params: historyDeleteParamsSchema,
       response: {
         // 204: fastify sends no body for 204 responses.
         204: z.null(),
-        "4xx": errorEnvelopeSchema,
-        "5xx": errorEnvelopeSchema,
+        400: errorEnvelopeSchema,
+        401: errorEnvelopeSchema,
+        404: errorEnvelopeSchema,
+        429: errorEnvelopeSchema,
+        500: errorEnvelopeSchema,
+      },
+      responseDocs: {
+        204: { description: "The entry was deleted. No body." },
+        400: { description: "Invalid request (`VALIDATION_ERROR`): bad `id` value." },
+        401: { description: "No valid session (`UNAUTHENTICATED`)." },
+        404: { description: "No such entry for this user (`NOT_FOUND`)." },
+        429: { description: "Rate limit exceeded (`RATE_LIMITED`) — see `retry-after`." },
+        500: { description: "Unexpected server error (`INTERNAL_ERROR`)." },
       },
     },
     async handler(request, reply) {
