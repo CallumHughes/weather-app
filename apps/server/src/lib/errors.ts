@@ -1,8 +1,11 @@
 import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
 import { hasZodFastifySchemaValidationErrors } from "fastify-type-provider-zod";
+import { z } from "zod";
 
 export const ErrorCodes = {
   VALIDATION_ERROR: "VALIDATION_ERROR",
+  UNAUTHENTICATED: "UNAUTHENTICATED",
+  NOT_FOUND: "NOT_FOUND",
   LOCATION_NOT_FOUND: "LOCATION_NOT_FOUND",
   UPSTREAM_ERROR: "UPSTREAM_ERROR",
   UPSTREAM_TIMEOUT: "UPSTREAM_TIMEOUT",
@@ -28,12 +31,15 @@ export class AppError extends Error {
   }
 }
 
-interface ErrorEnvelope {
-  error: {
-    code: string;
-    message: string;
-  };
-}
+/** Consistent error envelope for every non-2xx response. */
+export const errorEnvelopeSchema = z.object({
+  error: z.object({
+    code: z.string(),
+    message: z.string(),
+  }),
+});
+
+export type ErrorEnvelope = z.infer<typeof errorEnvelopeSchema>;
 
 function envelope(code: string, message: string): ErrorEnvelope {
   return { error: { code, message } };

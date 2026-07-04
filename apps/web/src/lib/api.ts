@@ -28,9 +28,25 @@ export interface WeatherResponse {
   };
 }
 
+/** A search-history entry as returned by GET /api/v1/history. */
+export interface HistoryItem {
+  id: string;
+  /** The raw (trimmed) text the user searched for. */
+  query: string;
+  resolvedName: string;
+  country: string;
+  state?: string;
+  lat: number;
+  lon: number;
+  /** ISO 8601 timestamp of the (most recent) search. */
+  createdAt: string;
+}
+
 /** Error codes the API can return in its `{ error: { code, message } }` envelope. */
 export type ApiErrorCode =
   | "VALIDATION_ERROR"
+  | "UNAUTHENTICATED"
+  | "NOT_FOUND"
   | "LOCATION_NOT_FOUND"
   | "UPSTREAM_ERROR"
   | "UPSTREAM_TIMEOUT"
@@ -51,7 +67,7 @@ export class ApiError extends Error {
 
 async function parseErrorEnvelope(response: Response): Promise<ApiError> {
   let code: ApiErrorCode = "INTERNAL_ERROR";
-  let message = "Something went wrong fetching the weather.";
+  let message = "Something went wrong.";
   try {
     const body: unknown = await response.json();
     if (
@@ -80,4 +96,26 @@ export async function getWeather(location: string): Promise<WeatherResponse> {
     throw await parseErrorEnvelope(response);
   }
   return (await response.json()) as WeatherResponse;
+}
+
+/**
+ * The user's recent searches (newest first, at most 10). Requires a
+ * session — the history panel is only rendered when signed in, so a 401
+ * here is an edge case surfaced as a plain error state (no toast/redirect).
+ */
+export async function getHistory(): Promise<HistoryItem[]> {
+  const response = await fetch("/api/v1/history");
+  if (!response.ok) {
+    throw await parseErrorEnvelope(response);
+  }
+  return (await response.json()) as HistoryItem[];
+}
+
+export async function deleteHistoryItem(id: string): Promise<void> {
+  const response = await fetch(`/api/v1/history/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    throw await parseErrorEnvelope(response);
+  }
 }

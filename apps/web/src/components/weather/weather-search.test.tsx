@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError, getWeather } from "@/lib/api";
@@ -15,13 +16,19 @@ vi.mock("@/lib/api", async (importOriginal) => {
 
 const getWeatherMock = vi.mocked(getWeather);
 
+/** The search state is lifted (see WeatherHome); a stateful harness stands in. */
+function Harness() {
+  const [search, setSearch] = useState("");
+  return <WeatherSearch search={search} onSearchChange={setSearch} />;
+}
+
 function renderSearch() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <WeatherSearch />
+      <Harness />
     </QueryClientProvider>,
   );
 }

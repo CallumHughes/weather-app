@@ -11,6 +11,20 @@ export const weatherQuerySchema = z.object({
 
 export type WeatherQuery = z.infer<typeof weatherQuerySchema>;
 
+/**
+ * Shape of a cached geocode entry. Cached payloads are re-validated on read
+ * so a stale/corrupt row degrades to a cache miss, never a 500.
+ */
+export const cachedGeocodeSchema = z.object({
+  name: z.string(),
+  country: z.string(),
+  state: z.string().optional(),
+  lat: z.number(),
+  lon: z.number(),
+});
+
+export type CachedGeocode = z.infer<typeof cachedGeocodeSchema>;
+
 /** Response DTO — the only shape the client ever sees. */
 export const weatherResponseSchema = z.object({
   location: z.object({
@@ -37,12 +51,5 @@ export const weatherResponseSchema = z.object({
 
 export type WeatherResponse = z.infer<typeof weatherResponseSchema>;
 
-/** Consistent error envelope for every non-2xx response. */
-export const errorEnvelopeSchema = z.object({
-  error: z.object({
-    code: z.string(),
-    message: z.string(),
-  }),
-});
-
-export type ErrorEnvelope = z.infer<typeof errorEnvelopeSchema>;
+/** Consistent error envelope for every non-2xx response (single source: lib/errors). */
+export { type ErrorEnvelope, errorEnvelopeSchema } from "@/lib/errors";

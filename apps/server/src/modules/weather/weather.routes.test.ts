@@ -14,6 +14,7 @@ import {
   expectedLondonDto,
   geocodeLondonFixture,
 } from "@/modules/weather/openweather.fixtures";
+import { InMemoryCacheStore, InMemoryHistoryRepo, stubSession } from "@/test/fakes";
 
 const JSON_HEADERS = { "content-type": "application/json" };
 
@@ -42,7 +43,14 @@ describe("GET /api/v1/weather", () => {
   });
 
   async function buildTestApp(options?: Parameters<typeof buildApp>[0]) {
-    app = buildApp({ logger: false, ...options });
+    // In-memory fakes: no test touches PostgreSQL or real sessions.
+    app = buildApp({
+      logger: false,
+      cacheStore: new InMemoryCacheStore(),
+      historyRepo: new InMemoryHistoryRepo(),
+      getSession: stubSession(null),
+      ...options,
+    });
     await app.ready();
     return app;
   }
@@ -85,6 +93,7 @@ describe("GET /api/v1/weather", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual(expectedLondonDto);
+    expect(response.headers["x-cache"]).toBe("MISS");
   });
 
   it("returns 400 VALIDATION_ERROR when location is missing", async () => {

@@ -1,0 +1,119 @@
+"use client";
+
+import { Button } from "@weather-app/ui/components/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@weather-app/ui/components/card";
+import { Skeleton } from "@weather-app/ui/components/skeleton";
+import { History, Trash2 } from "lucide-react";
+import Link from "next/link";
+
+import { useDeleteHistoryItem, useHistory } from "@/hooks/use-history";
+import type { HistoryItem } from "@/lib/api";
+import { authClient } from "@/lib/auth-client";
+
+/** Short relative time ("just now", "5m ago", "3h ago", "2d ago"). */
+function formatRelativeTime(iso: string, nowMs = Date.now()): string {
+  const minutes = Math.floor((nowMs - new Date(iso).getTime()) / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
+function locationLabel(item: HistoryItem): string {
+  return [item.resolvedName, item.state, item.country].filter(Boolean).join(", ");
+}
+
+export interface SearchHistoryProps {
+  /** Re-run a past search (sets the lifted search state). */
+  onSelect: (location: string) => void;
+}
+
+export function SearchHistory({ onSelect }: SearchHistoryProps) {
+  const { data: session, isPending: isSessionPending } = authClient.useSession();
+  const isSignedIn = Boolean(session);
+  const history = useHistory(isSignedIn);
+  const deleteItem = useDeleteHistoryItem();
+
+  if (isSessionPending) {
+    return null;
+  }
+
+  if (!isSignedIn) {
+    // Signed out: a single subtle line, no panel (and no history fetch).
+    return (
+      <p className="text-muted-foreground text-sm" data-testid="history-signed-out">
+        <Link href="/login" className="underline underline-offset-4 hover:text-foreground">
+          Sign in to keep your search history
+        </Link>
+      </p>
+    );
+  }
+
+  let content: React.ReactNode;
+  if (history.isPending) {
+    content = (
+      <div className="flex flex-col gap-2" data-testid="history-loading">
+        <Skeleton className="h-9 w-full" />
+        <Skeleton className="h-9 w-full" />
+        <Skeleton className="h-9 w-full" />
+      </div>
+    );
+  } else if (history.isError) {
+    content = (
+      <div className="flex flex-col items-start gap-2" data-testid="history-error">
+        <p className="text-muted-foreground text-sm">Couldn’t load your search history.</p>
+        <Button type="button" variant="outline" size="sm" onClick={() => history.refetch()}>
+          Retry
+        </Button>
+      </div>
+    );
+  } else if (history.data.length === 0) {
+    content = (
+      <p className="text-muted-foreground text-sm" data-testid="history-empty">
+        Your searches will appear here.
+      </p>
+    );
+  } else {
+    content = (
+      <ul className="flex flex-col" data-testid="history-list">
+        {history.data.map((item) => (
+          <li key={item.id} className="group flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => onSelect(item.resolvedName)}
+              className="flex min-w-0 flex-1 items-baseline justify-between gap-2 py-2 text-left text-sm hover:text-foreground"
+            >
+              <span className="truncate">{locationLabel(item)}</span>
+              <span className="shrink-0 text-muted-foreground text-xs">
+                {formatRelativeTime(item.createdAt)}
+              </span>
+            </button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Delete ${item.resolvedName} from history`}
+              disabled={deleteItem.isPending}
+              onClick={() => deleteItem.mutate(item.id)}
+            >
+              <Trash2 aria-hidden="true" />
+            </Button>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  return (
+    <Card data-testid="search-history">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <History aria-hidden="true" className="size-4" />
+          Recent searches
+        </CardTitle>
+      </CardHeader>
+      <CardContent>{content}</CardContent>
+    </Card>
+  );
+}
