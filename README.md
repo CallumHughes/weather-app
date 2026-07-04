@@ -109,6 +109,8 @@ Notes on features:
 
 - **Search history** requires an account — sign up / sign in from the header; the "Recent searches" panel on the home page then records your searches (click an entry to re-run it, or delete it). Signed-out searches are never stored.
 - **Weather caching**: repeated searches are served from a PostgreSQL TTL cache instead of hitting OpenWeather (10 min for weather, 24 h for geocoding). The `x-cache: HIT | MISS | STALE` response header on `/api/v1/weather` shows what happened; no extra setup or environment variables are needed.
+- **Health check**: `GET /health` on the API reports 200 `{ "status": "ok" }` when the database is reachable and 503 `{ "status": "degraded", "checks": { "database": "down" } }` when it is not. The docker-compose server healthcheck polls it (and it is the endpoint to configure as the Railway healthcheck path).
+- **Rate limiting**: the API allows 100 requests/minute per client IP (`/health` excluded); exceeding it returns 429 with a `retry-after` header.
 
 ## UI Customization
 

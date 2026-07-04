@@ -147,6 +147,18 @@ The application currently connects with the database's main credentials. That is
 2. **Per-service roles**: if services are split out (see the BFF section), each gets its own credential scoped to the tables it owns — enabling revocation, audit attribution, and blast-radius containment per service.
 3. **Auth data ownership**: were the auth service separated, it would become the sole owner of the auth tables (user, session, account, verification) — not just the only writer. Other services would obtain identity from the session/token via the auth service's API rather than reading its tables, because direct cross-service table reads couple every consumer to auth's schema migrations. Schema-per-service (and eventually database-per-service) enforces this ownership by topology rather than by grants.
 
+### API hardening (rate limiting, security headers, health check)
+
+**Rate limiting** (`@fastify/rate-limit`): a global limit of **100 requests / minute per client IP** on every route (constants in `apps/server/src/lib/rate-limit.ts`; `max`/`timeWindow` injectable via `buildApp` for tests). Exceeding it returns **429 on the standard `{ error: { code: "RATE_LIMITED", message } }` envelope** — the plugin *throws* the value produced by its `errorResponseBuilder`, so the builder returns an `AppError` and the shared error handler keeps every non-2xx response, 429 included, on one envelope. The standard `retry-after` and `x-ratelimit-*` headers stay enabled.
+
+- **`trustProxy: true` is required** for per-IP limiting to mean anything here: the browser reaches Fastify only through the Next.js BFF rewrite, and in production both sit behind Railway's edge proxy. Without it every request resolves to the proxy's IP and the "per-IP" limit collapses into one shared bucket; with it, `request.ip` is taken from `x-forwarded-for` (verified live through the dev proxy).
+- **The counter store is in-memory, per instance** — a deliberate trade-off matching the single-instance deployment. Horizontal scaling would multiply the effective limit by the instance count and reset counters on deploy; the fix is the plugin's Redis-backed store, the same shared-state move already described in [Scaling approach](#scaling-approach). Per-user (rather than per-IP) limits for authenticated routes are a further improvement, not built now.
+- **Auth endpoints**: Better-Auth ships its own rate limiting — enabled by default in production (disabled in dev), 100 req/60 s per IP in-memory, with stricter built-in rules for sensitive paths (e.g. `/sign-in/email`: 3 req/10 s). `/api/auth/*` also sits under the global Fastify limit; the two compose rather than conflict (Better-Auth's stricter windows bite first on brute-force patterns).
+
+**Security headers**: `@fastify/helmet` with defaults on the API (nosniff, frame denial, etc. — a JSON API needs no CSP tuning). The Next.js app sets a minimal set via `headers()` in `next.config.ts`: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`. A strict CSP for the web app is a future improvement — Next's inline runtime makes it a project of its own.
+
+**Health check**: `GET /health` (in `apps/server/src/lib/health.ts`) runs a `SELECT 1` DB ping bounded by a 2 s timeout, returning 200 `{ status: "ok" }` or 503 `{ status: "degraded", checks: { database: "down" } }`. The 503 body intentionally does **not** use the error envelope: it is a machine-readable health document for Docker/Railway probes, not a client-facing API error. The route is exempt from rate limiting (it is polled), its responses are never cached, and the docker-compose healthcheck targets it (the Railway healthcheck path should be set to `/health` in the service settings).
+
 ## Assumptions
 
 - Small user base and a single deployment region; no high-availability requirements.
@@ -166,6 +178,7 @@ With more time, in rough priority order:
 5. **Observability** — metrics (request duration, upstream latency, cache hit rate) on top of the existing structured logging.
 6. **Password reset / email verification** to round out the auth story.
 7. **Cache maintenance** — a periodic sweep of long-expired `weather_cache` rows (cleanup today is lazy, on read).
+8. **Strict CSP for the web app** — the API ships helmet defaults, but a meaningful `Content-Security-Policy` for the Next.js app needs nonce/hash work around its inline runtime.
 
 ## Scaling approach
 
