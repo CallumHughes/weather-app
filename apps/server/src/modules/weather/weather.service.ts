@@ -1,14 +1,36 @@
+import type { z } from "zod";
+
+import type { CacheStore } from "@/lib/cache";
 import { AppError, ErrorCodes } from "@/lib/errors";
 import type {
   CurrentWeatherResult,
   GeocodeResult,
   OpenWeatherClient,
 } from "@/modules/weather/openweather.client";
-import type { WeatherResponse } from "@/modules/weather/weather.schemas";
+import {
+  GEOCODE_TTL_SECONDS,
+  geocodeCacheKey,
+  WEATHER_TTL_SECONDS,
+  weatherCacheKey,
+} from "@/modules/weather/weather.constants";
+import {
+  type CachedGeocode,
+  cachedGeocodeSchema,
+  type WeatherResponse,
+  weatherResponseSchema,
+} from "@/modules/weather/weather.schemas";
+
+/** How the weather cache behaved for a request; surfaced as `x-cache`. */
+export type CacheOutcome = "HIT" | "MISS" | "STALE";
+
+export interface WeatherResult {
+  data: WeatherResponse;
+  cache: CacheOutcome;
+}
 
 /** Map upstream shapes to the client-facing DTO (never leak upstream shapes). */
 export function toWeatherResponse(
-  geo: GeocodeResult,
+  geo: CachedGeocode,
   weather: CurrentWeatherResult,
 ): WeatherResponse {
   const condition = weather.weather[0];
@@ -45,11 +67,85 @@ export function toWeatherResponse(
   };
 }
 
-export class WeatherService {
-  constructor(private readonly client: OpenWeatherClient) {}
+/** 502/504 upstream failures are the only errors eligible for the stale fallback. */
+function isUpstreamFailure(error: unknown): boolean {
+  return (
+    error instanceof AppError &&
+    (error.code === ErrorCodes.UPSTREAM_ERROR || error.code === ErrorCodes.UPSTREAM_TIMEOUT)
+  );
+}
 
-  async getCurrentWeather(location: string): Promise<WeatherResponse> {
-    const results = await this.client.geocode(location, 1);
+/**
+ * Read from the cache and re-validate the payload against its zod schema:
+ * a stale/corrupt cached payload degrades to a cache miss, never a 500.
+ */
+async function readValidated<S extends z.ZodType>(
+  read: () => Promise<unknown>,
+  schema: S,
+): Promise<z.output<S> | null> {
+  const value = await read();
+  if (value == null) {
+    return null;
+  }
+  const parsed = schema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+export class WeatherService {
+  constructor(
+    private readonly client: OpenWeatherClient,
+    private readonly cache: CacheStore,
+  ) {}
+
+  async getCurrentWeather(location: string): Promise<WeatherResult> {
+    const geo = await this.resolveLocation(location);
+
+    const key = weatherCacheKey(geo.lat, geo.lon);
+    const cached = await readValidated(() => this.cache.get(key), weatherResponseSchema);
+    if (cached) {
+      return { data: cached, cache: "HIT" };
+    }
+
+    let weather: CurrentWeatherResult;
+    try {
+      weather = await this.client.getCurrentWeather(geo.lat, geo.lon);
+    } catch (error) {
+      // Stale-on-upstream-failure: serve an expired entry over a 502/504.
+      if (isUpstreamFailure(error)) {
+        const stale = await readValidated(() => this.cache.getStale(key), weatherResponseSchema);
+        if (stale) {
+          return { data: stale, cache: "STALE" };
+        }
+      }
+      throw error;
+    }
+
+    const data = toWeatherResponse(geo, weather);
+    await this.cache.set(key, data, WEATHER_TTL_SECONDS);
+    return { data, cache: "MISS" };
+  }
+
+  /** Resolve a free-text location via the geocode cache, then upstream. */
+  private async resolveLocation(location: string): Promise<CachedGeocode> {
+    const key = geocodeCacheKey(location);
+    const cached = await readValidated(() => this.cache.get(key), cachedGeocodeSchema);
+    if (cached) {
+      return cached;
+    }
+
+    let results: GeocodeResult[];
+    try {
+      results = await this.client.geocode(location, 1);
+    } catch (error) {
+      if (isUpstreamFailure(error)) {
+        const stale = await readValidated(() => this.cache.getStale(key), cachedGeocodeSchema);
+        if (stale) {
+          return stale;
+        }
+      }
+      throw error;
+    }
+
     const match = results[0];
     if (!match) {
       throw new AppError(
@@ -58,7 +154,15 @@ export class WeatherService {
         `No location found matching "${location}".`,
       );
     }
-    const weather = await this.client.getCurrentWeather(match.lat, match.lon);
-    return toWeatherResponse(match, weather);
+
+    const entry: CachedGeocode = {
+      name: match.name,
+      country: match.country,
+      ...(match.state !== undefined && { state: match.state }),
+      lat: match.lat,
+      lon: match.lon,
+    };
+    await this.cache.set(key, entry, GEOCODE_TTL_SECONDS);
+    return entry;
   }
 }

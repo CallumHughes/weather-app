@@ -23,16 +23,31 @@ function isNotFound(error: unknown): boolean {
   return error instanceof ApiError && (error.code === "LOCATION_NOT_FOUND" || error.status === 404);
 }
 
-export function WeatherSearch() {
-  const [input, setInput] = useState("");
-  const [searched, setSearched] = useState("");
-  const query = useWeather(searched);
+export interface WeatherSearchProps {
+  /** The submitted search — lifted so the history panel can re-run searches. */
+  search: string;
+  onSearchChange: (next: string) => void;
+  /** Signed-in searches refresh the history panel after a successful fetch. */
+  isSignedIn?: boolean;
+}
+
+export function WeatherSearch({ search, onSearchChange, isSignedIn = false }: WeatherSearchProps) {
+  const [input, setInput] = useState(search);
+  // Sync the input field when something else (the history panel) sets the
+  // search — the "adjust state during render" pattern, no effect needed.
+  const [lastSearch, setLastSearch] = useState(search);
+  if (search !== lastSearch) {
+    setLastSearch(search);
+    setInput(search);
+  }
+
+  const query = useWeather(search, { isSignedIn });
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const next = input.trim();
     if (next) {
-      setSearched(next);
+      onSearchChange(next);
     }
   }
 
@@ -48,9 +63,9 @@ export function WeatherSearch() {
           <EmptyMedia variant="icon">
             <SearchX aria-hidden="true" />
           </EmptyMedia>
-          <EmptyTitle>No results for ‘{searched}’</EmptyTitle>
+          <EmptyTitle>No results for ‘{search}’</EmptyTitle>
           <EmptyDescription>
-            We couldn’t find ‘{searched}’. Check the spelling or try a nearby city.
+            We couldn’t find ‘{search}’. Check the spelling or try a nearby city.
           </EmptyDescription>
         </EmptyHeader>
       </Empty>

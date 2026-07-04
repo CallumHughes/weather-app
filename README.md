@@ -105,6 +105,11 @@ Or start a single app with `pnpm nx dev web` / `pnpm nx dev server`.
 Open [http://localhost:3001](http://localhost:3001) in your browser to see the web application.
 The API is running at [http://localhost:3000](http://localhost:3000).
 
+Notes on features:
+
+- **Search history** requires an account — sign up / sign in from the header; the "Recent searches" panel on the home page then records your searches (click an entry to re-run it, or delete it). Signed-out searches are never stored.
+- **Weather caching**: repeated searches are served from a PostgreSQL TTL cache instead of hitting OpenWeather (10 min for weather, 24 h for geocoding). The `x-cache: HIT | MISS | STALE` response header on `/api/v1/weather` shows what happened; no extra setup or environment variables are needed.
+
 ## UI Customization
 
 React web apps in this stack share shadcn/ui primitives through `packages/ui`.

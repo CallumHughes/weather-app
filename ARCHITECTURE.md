@@ -14,6 +14,7 @@ graph LR
   subgraph API["apps/server — Fastify :3000"]
     AUTH[Better-Auth handler]
     WX[Weather routes]
+    HIST[History routes]
   end
   DB[(PostgreSQL)]
   EXT[OpenWeather API]
@@ -21,7 +22,8 @@ graph LR
   B -->|same-origin requests| Web
   RW -->|INTERNAL_SERVER_URL, private network| API
   AUTH --> DB
-  WX -->|planned: cache + history| DB
+  WX -->|TTL cache + history recording| DB
+  HIST -->|session-guarded| DB
   WX --> EXT
 ```
 
@@ -122,7 +124,20 @@ Every commit runs lint/format (Biome via lint-staged) **and the full test suite*
 
 - Schema is managed by Prisma migrations (`prisma migrate dev` locally, `prisma migrate deploy` in production) — the migration history in `packages/db/prisma/migrations` is the source of truth, not `db push`.
 - Auth tables (user, session, account, verification) are owned by Better-Auth's Prisma adapter.
-- Planned domain models: per-user **search history** and a **weather cache** table keyed by location with a TTL, so repeated searches within the TTL window are served from PostgreSQL instead of the external API. PostgreSQL was chosen over Redis for the cache to keep a single datastore at this scale; the cache access pattern is isolated so it could be swapped for Redis without touching callers.
+- Domain models (implemented, `packages/db/prisma/schema/app.prisma`): a **weather cache** table (`weather_cache`: key → JSON payload + `expiresAt`) and per-user **search history** (`search_history`, cascade-deleted with the user). PostgreSQL was chosen over Redis for the cache to keep a single datastore at this scale; the cache sits behind a small `CacheStore` interface (`get`/`getStale`/`set` in `apps/server/src/lib/cache.ts`), so a Redis implementation is a drop-in swap without touching callers.
+
+**Weather cache strategy** (`apps/server/src/modules/weather/weather.constants.ts`):
+
+- **Keys and granularity**: geocode lookups are cached as `geo:v1:{query, trimmed + lowercased}`; current weather as `wx:v1:{lat}:{lon}` with coordinates rounded to 2 dp (~1 km), so nearby queries share one entry. The cached payload is the mapped DTO, never the raw upstream body.
+- **TTLs**: 10 minutes for current weather (freshness on the order of minutes is acceptable, see Assumptions), 24 hours for geocoding (places don't move).
+- **Expiry and cleanup**: expiry is checked lazily on read; expired rows are retained for a stale window (24 h) and deleted lazily only beyond it, so they stay available as a fallback. A periodic sweep of long-expired rows is a noted future improvement.
+- **Stale-on-upstream-failure**: when OpenWeather fails (502/504 paths) and an expired entry exists, the API serves it instead of the error. Cache behaviour is surfaced per response via the `x-cache: HIT | MISS | STALE` header on `GET /api/v1/weather`.
+- **Invalidation**: TTL-based. Keys are versioned (`v1`), so a change to the cached shape busts the cache by bumping the version — no flush needed. Cached payloads are also re-validated against the DTO zod schema on read; a corrupt/outdated payload degrades to a cache miss, never a 500.
+- **Failure isolation**: every cache call goes through a safe wrapper — a thrown cache error is logged and treated as a miss, so cache trouble can never break a weather request.
+
+**Search history**: recorded server-side after each successful weather fetch for signed-in users only (anonymous searches are never stored). A consecutive repeat of the same coordinates updates the existing row (timestamp + raw query) instead of inserting; storage is capped at the newest 50 rows per user (older rows evicted on insert). `GET /api/v1/history` returns the newest 10; `DELETE /api/v1/history/:id` is filtered by owner and returns 404 for anything else (never revealing other users' ids). Recording failures are logged and never fail the weather response.
+
+**Testing seam**: the cache (`CacheStore`), history storage (`HistoryRepo`), and session resolution are injected into `buildApp()`, so route tests run with in-memory fakes and stubbed sessions — no test needs a running PostgreSQL or a real session. The trade-off: the Prisma implementations themselves are exercised against stubs, not a real database; DB integration tests via a CI service container are a known gap (see Future improvements).
 
 ### Database access and least privilege
 
@@ -144,12 +159,13 @@ The application currently connects with the database's main credentials. That is
 
 With more time, in rough priority order:
 
-1. **CI pipeline** (GitHub Actions): lint, type-check, and test on every push.
+1. **CI pipeline** (GitHub Actions): lint, type-check, and test on every push — including DB integration tests for the Prisma cache/history implementations against a PostgreSQL service container (currently exercised via stubs only).
 2. **OpenAPI documentation** generated from the Fastify route schemas, so docs cannot drift from the implementation.
 3. **Forecast and favourites** — extend the weather provider client and add a favourites model reusing the protected-endpoint pattern from search history.
 4. **E2E coverage** — a Playwright happy path (register → search → see weather → revisit history).
 5. **Observability** — metrics (request duration, upstream latency, cache hit rate) on top of the existing structured logging.
 6. **Password reset / email verification** to round out the auth story.
+7. **Cache maintenance** — a periodic sweep of long-expired `weather_cache` rows (cleanup today is lazy, on read).
 
 ## Scaling approach
 
