@@ -1,33 +1,21 @@
-"use client";
-import Link from "next/link";
+import { Cloud } from "lucide-react";
 
+import { AccountChip } from "./account-chip";
 import { ModeToggle } from "./mode-toggle";
-import UserMenu from "./user-menu";
 
 export default function Header() {
-  const links = [
-    { to: "/", label: "Home" },
-    { to: "/dashboard", label: "Dashboard" },
-  ] as const;
-
   return (
-    <div>
-      <div className="flex flex-row items-center justify-between px-2 py-1">
-        <nav className="flex gap-4 text-lg">
-          {links.map(({ to, label }) => {
-            return (
-              <Link key={to} href={to}>
-                {label}
-              </Link>
-            );
-          })}
-        </nav>
+    <header className="border-b">
+      <div className="mx-auto flex w-full items-center justify-between px-4 py-2">
+        <span className="flex items-center gap-2 font-medium">
+          <Cloud aria-hidden="true" className="size-4" />
+          Weather
+        </span>
         <div className="flex items-center gap-2">
           <ModeToggle />
-          <UserMenu />
+          <AccountChip />
         </div>
       </div>
-      <hr />
-    </div>
+    </header>
   );
 }

@@ -7,22 +7,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@weather-app/ui/components/card";
-import { Star } from "lucide-react";
+import { Droplets, MapPin, Star, Thermometer, Wind } from "lucide-react";
 
-import type { WeatherResponse } from "@/lib/api";
+import type { WeatherResult } from "@/lib/api";
+import { formatRelativeTime } from "@/lib/format";
 
-function formatObservedAt(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return iso;
-  }
-  return date.toLocaleString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    day: "numeric",
-    month: "short",
-  });
-}
+import { conditionIcon } from "./condition-icon";
 
 /** Star-toggle state and callback, provided by the container when signed in. */
 export interface WeatherCardFavourite {
@@ -32,23 +22,53 @@ export interface WeatherCardFavourite {
   onToggle: () => void;
 }
 
+function StatTile({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-lg bg-muted p-3">
+      <dt className="flex items-center gap-1.5 text-muted-foreground text-xs">
+        <Icon aria-hidden className="size-3.5" />
+        {label}
+      </dt>
+      <dd className="mt-1 font-medium text-lg tabular-nums">{value}</dd>
+    </div>
+  );
+}
+
 /** Presentational: renders the weather DTO, does no fetching. */
 export function WeatherCard({
   weather,
   favourite,
 }: {
-  weather: WeatherResponse;
+  weather: WeatherResult;
   /** Omitted when signed out — the star is not rendered at all. */
   favourite?: WeatherCardFavourite;
 }) {
-  const { location, current } = weather;
+  const { location, current, cache } = weather;
   const place = [location.name, location.state, location.country].filter(Boolean).join(", ");
+  // HIT/STALE means the server answered from its weather cache; MISS (or a
+  // missing header) means a fresh upstream fetch — nothing worth flagging.
+  const isCached = cache === "HIT" || cache === "STALE";
+  const ConditionIcon = conditionIcon(current.condition.main);
 
   return (
     <Card data-testid="weather-card">
       <CardHeader>
-        <CardTitle>{place}</CardTitle>
-        <CardDescription>Observed at {formatObservedAt(current.observedAt)}</CardDescription>
+        <CardTitle className="flex items-center gap-1.5">
+          <MapPin aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+          {place}
+        </CardTitle>
+        <CardDescription>
+          Updated {formatRelativeTime(current.observedAt)}
+          {isCached && " · cached"}
+        </CardDescription>
         {favourite && (
           <CardAction>
             <Button
@@ -72,36 +92,27 @@ export function WeatherCard({
           </CardAction>
         )}
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <div className="flex items-center gap-3">
-          {/* biome-ignore lint/performance/noImgElement: tiny external icon; next/image optimization adds a proxy hop for no benefit */}
-          <img
-            src={`https://openweathermap.org/img/wn/${current.condition.icon}@2x.png`}
-            alt={current.condition.description}
-            width={80}
-            height={80}
-            className="-m-2 size-20"
-          />
+      <CardContent className="flex flex-col gap-5">
+        <div className="flex items-center gap-4">
+          <ConditionIcon aria-hidden="true" className="size-11 shrink-0 text-muted-foreground" />
           <div>
-            <p className="font-medium text-4xl tabular-nums">
+            <p className="font-medium text-4xl tabular-nums leading-none">
               {Math.round(current.temperatureC)}°C
             </p>
-            <p className="text-muted-foreground capitalize">{current.condition.description}</p>
+            <p className="mt-1.5 text-muted-foreground text-sm">
+              <span className="capitalize">{current.condition.description}</span>
+              {` · feels like ${Math.round(current.feelsLikeC)}°`}
+            </p>
           </div>
         </div>
-        <dl className="grid grid-cols-3 gap-2 border-t pt-4">
-          <div>
-            <dt className="text-muted-foreground">Feels like</dt>
-            <dd className="font-medium tabular-nums">{Math.round(current.feelsLikeC)}°C</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Humidity</dt>
-            <dd className="font-medium tabular-nums">{current.humidityPct}%</dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Wind</dt>
-            <dd className="font-medium tabular-nums">{current.windSpeedMs} m/s</dd>
-          </div>
+        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <StatTile icon={Wind} label="Wind" value={`${current.windSpeedMs} m/s`} />
+          <StatTile icon={Droplets} label="Humidity" value={`${current.humidityPct}%`} />
+          <StatTile
+            icon={Thermometer}
+            label="Feels like"
+            value={`${Math.round(current.feelsLikeC)}°C`}
+          />
         </dl>
       </CardContent>
     </Card>

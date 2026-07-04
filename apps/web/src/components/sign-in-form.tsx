@@ -1,8 +1,7 @@
 import { useForm } from "@tanstack/react-form";
 import { Button } from "@weather-app/ui/components/button";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@weather-app/ui/components/field";
 import { Input } from "@weather-app/ui/components/input";
-import { Label } from "@weather-app/ui/components/label";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import z from "zod";
 
@@ -10,8 +9,7 @@ import { authClient } from "@/lib/auth-client";
 
 import Loader from "./loader";
 
-export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () => void }) {
-  const router = useRouter();
+export default function SignInForm({ onSuccess }: { onSuccess?: () => void }) {
   const { isPending } = authClient.useSession();
 
   const form = useForm({
@@ -27,8 +25,8 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
         },
         {
           onSuccess: () => {
-            router.push("/dashboard");
             toast.success("Sign in successful");
+            onSuccess?.();
           },
           onError: (error) => {
             toast.error(error.error.message || error.error.statusText);
@@ -49,86 +47,72 @@ export default function SignInForm({ onSwitchToSignUp }: { onSwitchToSignUp: () 
   }
 
   return (
-    <div className="mx-auto mt-10 w-full max-w-md p-6">
-      <h1 className="mb-6 text-center font-bold text-3xl">Welcome Back</h1>
-
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          form.handleSubmit();
-        }}
-        className="space-y-4"
-      >
-        <div>
-          <form.Field name="email">
-            {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor={field.name}>Email</Label>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        form.handleSubmit();
+      }}
+    >
+      <FieldGroup>
+        <form.Field name="email">
+          {(field) => {
+            const invalid = field.state.meta.errors.length > 0;
+            return (
+              <Field data-invalid={invalid || undefined}>
+                <FieldLabel htmlFor={field.name}>Email</FieldLabel>
                 <Input
                   id={field.name}
                   name={field.name}
                   type="email"
+                  placeholder="m@example.com"
+                  aria-invalid={invalid || undefined}
                   value={field.state.value}
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
                 />
-                {field.state.meta.errors.map((error) => (
-                  <p key={error?.message} className="text-red-500">
-                    {error?.message}
-                  </p>
-                ))}
-              </div>
-            )}
-          </form.Field>
-        </div>
+                <FieldError errors={field.state.meta.errors} />
+              </Field>
+            );
+          }}
+        </form.Field>
 
-        <div>
-          <form.Field name="password">
-            {(field) => (
-              <div className="space-y-2">
-                <Label htmlFor={field.name}>Password</Label>
+        <form.Field name="password">
+          {(field) => {
+            const invalid = field.state.meta.errors.length > 0;
+            return (
+              <Field data-invalid={invalid || undefined}>
+                <FieldLabel htmlFor={field.name}>Password</FieldLabel>
                 <Input
                   id={field.name}
                   name={field.name}
                   type="password"
+                  aria-invalid={invalid || undefined}
                   value={field.state.value}
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
                 />
-                {field.state.meta.errors.map((error) => (
-                  <p key={error?.message} className="text-red-500">
-                    {error?.message}
-                  </p>
-                ))}
-              </div>
+                <FieldError errors={field.state.meta.errors} />
+              </Field>
+            );
+          }}
+        </form.Field>
+
+        <Field>
+          <form.Subscribe
+            selector={(state) => ({
+              canSubmit: state.canSubmit,
+              isSubmitting: state.isSubmitting,
+            })}
+          >
+            {({ canSubmit, isSubmitting }) => (
+              <Button type="submit" className="w-full" disabled={!canSubmit || isSubmitting}>
+                {isSubmitting ? "Submitting..." : "Sign in"}
+              </Button>
             )}
-          </form.Field>
-        </div>
-
-        <form.Subscribe
-          selector={(state) => ({
-            canSubmit: state.canSubmit,
-            isSubmitting: state.isSubmitting,
-          })}
-        >
-          {({ canSubmit, isSubmitting }) => (
-            <Button type="submit" className="w-full" disabled={!canSubmit || isSubmitting}>
-              {isSubmitting ? "Submitting..." : "Sign In"}
-            </Button>
-          )}
-        </form.Subscribe>
-      </form>
-
-      <div className="mt-4 text-center">
-        <Button
-          variant="link"
-          onClick={onSwitchToSignUp}
-          className="text-indigo-600 hover:text-indigo-800"
-        >
-          Need an account? Sign Up
-        </Button>
-      </div>
-    </div>
+          </form.Subscribe>
+        </Field>
+      </FieldGroup>
+    </form>
   );
 }

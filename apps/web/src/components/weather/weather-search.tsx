@@ -1,16 +1,21 @@
 "use client";
 
+import { Alert, AlertDescription, AlertTitle } from "@weather-app/ui/components/alert";
 import { Button } from "@weather-app/ui/components/button";
 import {
   Empty,
+  EmptyContent,
   EmptyDescription,
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
 } from "@weather-app/ui/components/empty";
-import { Input } from "@weather-app/ui/components/input";
-import { Label } from "@weather-app/ui/components/label";
-import { CloudSun, Loader2, SearchX, TriangleAlert } from "lucide-react";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@weather-app/ui/components/input-group";
+import { CloudOff, CloudSun, Loader2, MapPinOff, RefreshCw, Search } from "lucide-react";
 import { useState } from "react";
 
 import { useAddFavourite, useFavourites, useRemoveFavourite } from "@/hooks/use-favourites";
@@ -30,9 +35,19 @@ export interface WeatherSearchProps {
   onSearchChange: (next: string) => void;
   /** Signed-in searches refresh the history panel after a successful fetch. */
   isSignedIn?: boolean;
+  /** Chip row (mobile favourites) rendered between the search bar and the result. */
+  chips?: React.ReactNode;
+  /** Sidebar content rendered in the right column on desktop, stacked below on mobile. */
+  sidebar?: React.ReactNode;
 }
 
-export function WeatherSearch({ search, onSearchChange, isSignedIn = false }: WeatherSearchProps) {
+export function WeatherSearch({
+  search,
+  onSearchChange,
+  isSignedIn = false,
+  chips,
+  sidebar,
+}: WeatherSearchProps) {
   const [input, setInput] = useState(search);
   // Sync the input field when something else (the history panel) sets the
   // search — the "adjust state during render" pattern, no effect needed.
@@ -91,32 +106,31 @@ export function WeatherSearch({ search, onSearchChange, isSignedIn = false }: We
     // Loading: skeleton mirroring the card layout.
     result = <WeatherSkeleton />;
   } else if (query.isError && isNotFound(query.error)) {
-    // Not found: a normal outcome, styled neutrally (no red).
+    // Not found: a normal outcome — warning-toned, not destructive. The theme
+    // has no warning token, so amber utilities are the agreed exception.
     result = (
-      <Empty className="border" data-testid="weather-not-found">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <SearchX aria-hidden="true" />
-          </EmptyMedia>
-          <EmptyTitle>No results for ‘{search}’</EmptyTitle>
-          <EmptyDescription>
-            We couldn’t find ‘{search}’. Check the spelling or try a nearby city.
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <Alert
+        data-testid="weather-not-found"
+        className="border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400"
+      >
+        <MapPinOff aria-hidden="true" />
+        <AlertTitle>Couldn’t find “{search}”</AlertTitle>
+        <AlertDescription className="text-amber-700/90 dark:text-amber-400/90">
+          Check the spelling or try a nearby city.
+        </AlertDescription>
+      </Alert>
     );
   } else if (query.isError) {
     // Error: network / validation / upstream failure, with a working Retry.
     result = (
-      <div
-        data-testid="weather-error"
-        className="flex flex-col items-center gap-3 border border-destructive/40 bg-destructive/10 p-6 text-center"
-      >
-        <TriangleAlert aria-hidden="true" className="size-5 text-destructive" />
-        <p className="font-medium text-destructive text-sm">
-          Something went wrong fetching the weather.
-        </p>
+      <div data-testid="weather-error" className="flex flex-col items-start gap-3">
+        <Alert variant="destructive" className="border-destructive/40 bg-destructive/10">
+          <CloudOff aria-hidden="true" />
+          <AlertTitle>Weather service unavailable</AlertTitle>
+          <AlertDescription>Couldn’t reach the forecast provider.</AlertDescription>
+        </Alert>
         <Button type="button" variant="outline" onClick={() => query.refetch()}>
+          <RefreshCw aria-hidden="true" />
           Retry
         </Button>
       </div>
@@ -132,37 +146,47 @@ export function WeatherSearch({ search, onSearchChange, isSignedIn = false }: We
           <EmptyMedia variant="icon">
             <CloudSun aria-hidden="true" />
           </EmptyMedia>
-          <EmptyTitle>Search for a city</EmptyTitle>
-          <EmptyDescription>
-            Enter a city name above to see the current weather there.
-          </EmptyDescription>
+          <EmptyTitle>Search for a location</EmptyTitle>
+          <EmptyDescription>Try a city name.</EmptyDescription>
         </EmptyHeader>
+        <EmptyContent>
+          <Button type="button" variant="outline" onClick={() => onSearchChange("Manchester")}>
+            Try Manchester
+          </Button>
+        </EmptyContent>
       </Empty>
     );
   }
 
   return (
     <div className="flex flex-col gap-6">
-      <form onSubmit={handleSubmit} className="flex flex-col gap-2">
-        <Label htmlFor="weather-location">City</Label>
-        <div className="flex gap-2">
-          <Input
+      <form onSubmit={handleSubmit} className="flex gap-2">
+        <InputGroup>
+          <InputGroupAddon>
+            <Search aria-hidden="true" />
+          </InputGroupAddon>
+          <InputGroupInput
             id="weather-location"
             name="location"
             type="text"
-            placeholder="e.g. London"
+            aria-label="City"
+            placeholder="Search for a city…"
             autoComplete="off"
             maxLength={100}
             value={input}
             onChange={(event) => setInput(event.target.value)}
           />
-          <Button type="submit" disabled={query.isFetching}>
-            {query.isFetching && <Loader2 aria-hidden="true" className="animate-spin" />}
-            Search
-          </Button>
-        </div>
+        </InputGroup>
+        <Button type="submit" disabled={query.isFetching}>
+          {query.isFetching && <Loader2 aria-hidden="true" className="animate-spin" />}
+          Search
+        </Button>
       </form>
-      <div aria-live="polite">{result}</div>
+      {chips}
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div aria-live="polite">{result}</div>
+        {sidebar && <div className="flex flex-col gap-6">{sidebar}</div>}
+      </div>
     </div>
   );
 }

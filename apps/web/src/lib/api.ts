@@ -115,12 +115,24 @@ async function parseErrorEnvelope(response: Response): Promise<ApiError> {
   return new ApiError(response.status, code, message);
 }
 
-export async function getWeather(location: string): Promise<WeatherResponse> {
+/** Cache verdict from the server's `x-cache` response header. */
+export type WeatherCacheStatus = "HIT" | "MISS" | "STALE";
+
+/** The weather DTO plus client-side response metadata (cache verdict). */
+export type WeatherResult = WeatherResponse & { cache?: WeatherCacheStatus };
+
+function parseCacheHeader(value: string | null): WeatherCacheStatus | undefined {
+  return value === "HIT" || value === "MISS" || value === "STALE" ? value : undefined;
+}
+
+export async function getWeather(location: string): Promise<WeatherResult> {
   const response = await fetch(`/api/v1/weather?location=${encodeURIComponent(location)}`);
   if (!response.ok) {
     throw await parseErrorEnvelope(response);
   }
-  return (await response.json()) as WeatherResponse;
+  const body = (await response.json()) as WeatherResponse;
+  const cache = parseCacheHeader(response.headers.get("x-cache"));
+  return cache === undefined ? body : { ...body, cache };
 }
 
 /**

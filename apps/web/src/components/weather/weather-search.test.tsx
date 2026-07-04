@@ -79,7 +79,19 @@ describe("WeatherSearch", () => {
     renderSearch();
 
     expect(screen.getByTestId("weather-empty")).toBeInTheDocument();
-    expect(screen.getByText("Search for a city")).toBeInTheDocument();
+    expect(screen.getByText("Search for a location")).toBeInTheDocument();
+  });
+
+  it("runs a Manchester search from the empty state's suggestion button", async () => {
+    getWeatherMock.mockResolvedValue(londonWeatherFixture);
+    renderSearch();
+
+    await userEvent.click(screen.getByRole("button", { name: "Try Manchester" }));
+
+    expect(await screen.findByTestId("weather-card")).toBeInTheDocument();
+    expect(getWeatherMock).toHaveBeenCalledWith("Manchester");
+    // The suggestion also fills the search input.
+    expect(screen.getByLabelText("City")).toHaveValue("Manchester");
   });
 
   it("shows the loading skeleton and disables the button while fetching", async () => {
@@ -112,7 +124,8 @@ describe("WeatherSearch", () => {
     await searchFor("Atlantis");
 
     const notFound = await screen.findByTestId("weather-not-found");
-    expect(notFound).toHaveTextContent("Atlantis");
+    expect(notFound).toHaveTextContent("Couldn’t find “Atlantis”");
+    expect(notFound).toHaveTextContent("Check the spelling or try a nearby city.");
     expect(screen.queryByTestId("weather-error")).not.toBeInTheDocument();
   });
 
@@ -123,7 +136,8 @@ describe("WeatherSearch", () => {
     const user = await searchFor("London");
 
     expect(await screen.findByTestId("weather-error")).toBeInTheDocument();
-    expect(screen.getByText("Something went wrong fetching the weather.")).toBeInTheDocument();
+    expect(screen.getByText("Weather service unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Couldn’t reach the forecast provider.")).toBeInTheDocument();
     expect(getWeatherMock).toHaveBeenCalledTimes(1);
 
     // Retry: the next attempt succeeds and renders the card.
