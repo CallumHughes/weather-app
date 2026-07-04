@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -122,7 +122,43 @@ describe("WeatherHome", () => {
     renderHome();
 
     expect(screen.queryByTestId("favourites")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("favourite-chips")).not.toBeInTheDocument();
     expect(getFavouritesMock).not.toHaveBeenCalled();
+  });
+
+  it("renders favourites as chips; tapping one re-runs the search", async () => {
+    setSession(true);
+    getHistoryMock.mockResolvedValue([]);
+    const favourite: FavouriteItem = {
+      id: "f1",
+      name: "London",
+      country: "GB",
+      state: "England",
+      lat: 51.5073219,
+      lon: -0.1276474,
+      sortOrder: null,
+      createdAt: new Date().toISOString(),
+    };
+    getFavouritesMock.mockResolvedValue([favourite]);
+    getWeatherMock.mockResolvedValue(londonWeatherFixture);
+    renderHome();
+
+    const chips = await screen.findByTestId("favourite-chips");
+    await userEvent.click(within(chips).getByRole("button", { name: "London" }));
+
+    expect(await screen.findByTestId("weather-card")).toBeInTheDocument();
+    expect(getWeatherMock).toHaveBeenCalledWith("London");
+    expect(screen.getByLabelText("City")).toHaveValue("London");
+  });
+
+  it("renders no chip row when there are no favourites", async () => {
+    setSession(true);
+    getHistoryMock.mockResolvedValue([]);
+    getFavouritesMock.mockResolvedValue([]);
+    renderHome();
+
+    await screen.findByTestId("favourites-empty");
+    expect(screen.queryByTestId("favourite-chips")).not.toBeInTheDocument();
   });
 
   it("invalidates the history query after a successful signed-in search", async () => {
@@ -135,7 +171,7 @@ describe("WeatherHome", () => {
     expect(getHistoryMock).toHaveBeenCalledTimes(1);
 
     await userEvent.type(screen.getByLabelText("City"), "London");
-    await userEvent.click(screen.getByRole("button", { name: /search/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Search" }));
     await screen.findByTestId("weather-card");
 
     // Weather success while signed in → ["history"] invalidated → refetch.
@@ -150,7 +186,7 @@ describe("WeatherHome", () => {
     expect(screen.getByTestId("history-signed-out")).toBeInTheDocument();
 
     await userEvent.type(screen.getByLabelText("City"), "London");
-    await userEvent.click(screen.getByRole("button", { name: /search/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Search" }));
     await screen.findByTestId("weather-card");
 
     expect(getHistoryMock).not.toHaveBeenCalled();

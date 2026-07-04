@@ -9,27 +9,18 @@ export function WeatherSkeleton() {
         <Skeleton className="h-4 w-40" />
         <Skeleton className="h-3 w-28" />
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <div className="flex items-center gap-3">
-          <Skeleton className="size-16" />
+      <CardContent className="flex flex-col gap-5">
+        <div className="flex items-center gap-4">
+          <Skeleton className="size-11 rounded-full" />
           <div className="flex flex-col gap-2">
             <Skeleton className="h-9 w-24" />
-            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-4 w-36" />
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-2 border-t pt-4">
-          <div className="flex flex-col gap-2">
-            <Skeleton className="h-3 w-14" />
-            <Skeleton className="h-4 w-10" />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Skeleton className="h-3 w-14" />
-            <Skeleton className="h-4 w-10" />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Skeleton className="h-3 w-14" />
-            <Skeleton className="h-4 w-10" />
-          </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <Skeleton className="h-[4.5rem] rounded-lg" />
+          <Skeleton className="h-[4.5rem] rounded-lg" />
+          <Skeleton className="h-[4.5rem] rounded-lg" />
         </div>
       </CardContent>
     </Card>

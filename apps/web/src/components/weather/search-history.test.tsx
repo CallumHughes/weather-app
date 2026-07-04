@@ -73,9 +73,21 @@ describe("SearchHistory", () => {
 
     const hint = screen.getByTestId("history-signed-out");
     expect(hint).toHaveTextContent("Sign in to keep your search history");
-    expect(screen.getByRole("link", { name: /sign in/i })).toHaveAttribute("href", "/login");
     expect(screen.queryByTestId("search-history")).not.toBeInTheDocument();
     expect(getHistoryMock).not.toHaveBeenCalled();
+  });
+
+  it("signed out: the hint opens the auth drawer instead of linking to a login page", async () => {
+    signedOut();
+    renderPanel();
+
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Sign in to keep your search history" }),
+    );
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText("Sign in to keep favourites and search history.")).toBeInTheDocument();
   });
 
   it("signed in: shows skeletons while loading, then the list", async () => {

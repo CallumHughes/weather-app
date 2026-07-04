@@ -4,21 +4,12 @@ import { Button } from "@weather-app/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@weather-app/ui/components/card";
 import { Skeleton } from "@weather-app/ui/components/skeleton";
 import { History, Trash2 } from "lucide-react";
-import Link from "next/link";
 
+import { AuthDrawer } from "@/components/auth/auth-drawer";
 import { useDeleteHistoryItem, useHistory } from "@/hooks/use-history";
 import type { HistoryItem } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
-
-/** Short relative time ("just now", "5m ago", "3h ago", "2d ago"). */
-function formatRelativeTime(iso: string, nowMs = Date.now()): string {
-  const minutes = Math.floor((nowMs - new Date(iso).getTime()) / 60_000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
+import { formatRelativeTime } from "@/lib/format";
 
 function locationLabel(item: HistoryItem): string {
   return [item.resolvedName, item.state, item.country].filter(Boolean).join(", ");
@@ -41,11 +32,16 @@ export function SearchHistory({ onSelect }: SearchHistoryProps) {
 
   if (!isSignedIn) {
     // Signed out: a single subtle line, no panel (and no history fetch).
+    // The link-style button opens the auth drawer instead of a /login page.
     return (
       <p className="text-muted-foreground text-sm" data-testid="history-signed-out">
-        <Link href="/login" className="underline underline-offset-4 hover:text-foreground">
-          Sign in to keep your search history
-        </Link>
+        <AuthDrawer
+          trigger={
+            <button type="button" className="underline underline-offset-4 hover:text-foreground">
+              Sign in to keep your search history
+            </button>
+          }
+        />
       </p>
     );
   }
@@ -76,7 +72,7 @@ export function SearchHistory({ onSelect }: SearchHistoryProps) {
     );
   } else {
     content = (
-      <ul className="flex flex-col" data-testid="history-list">
+      <ul className="flex flex-col divide-y" data-testid="history-list">
         {history.data.map((item) => (
           <li key={item.id} className="group flex items-center gap-1">
             <button

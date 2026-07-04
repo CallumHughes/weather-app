@@ -56,7 +56,7 @@ export function Favourites({ onSelect }: FavouritesProps) {
     );
   } else {
     content = (
-      <ul className="flex flex-col" data-testid="favourites-list">
+      <ul className="flex flex-col divide-y" data-testid="favourites-list">
         {favourites.data.map((item) => (
           <li key={item.id} className="group flex items-center gap-1">
             <button

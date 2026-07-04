@@ -20,9 +20,9 @@ Core functionality and the items the brief lists as required.
 | M8 | At least one data persistence feature (see choice above) | ✅ Done (per-user search history + PostgreSQL TTL weather cache; see ARCHITECTURE.md → Data and persistence) |
 | M9 | Front-end handles loading states and error states (invalid location, API failure) | ✅ Done (empty/loading/not-found/error/success states, retry on failure) |
 | M10 | Clean separation between presentation and data logic; clear state management | ✅ Done (api wrapper + `use-weather` hook via TanStack Query; presentational components take DTO props) |
-| M11 | Responsive layout across mobile, tablet, and desktop | ⬜ To do |
+| M11 | Responsive layout across mobile, tablet, and desktop | ✅ Done (single home page: two-column desktop grid with sidebar, single-column mobile with favourite-chip row; auth in a responsive drawer — Dialog on desktop, bottom Drawer on mobile) |
 | M12 | Back-end unit tests (business logic, utilities) and integration tests (API endpoints, edge cases: invalid input, upstream failure) | ✅ Done (Vitest; DTO-mapping/cache/history-logic unit tests + endpoint tests with OpenWeather mocked at the HTTP layer, cache and history storage as in-memory fakes, sessions stubbed: 200/400/401/404/502/504, cache HIT/MISS/STALE. Caveat: the Prisma implementations are exercised against stubs, not a real PostgreSQL — DB integration tests are a known gap that CI with a service container would close) |
-| M13 | Front-end unit tests (components, hooks, utilities) | ✅ Done for the weather feature (Vitest + Testing Library: card rendering, search flow incl. loading/not-found/error/retry, history panel incl. signed-out hint/loading/empty/error/delete/click-to-rerun); auth/dashboard components untested |
+| M13 | Front-end unit tests (components, hooks, utilities) | ✅ Done for the weather feature (Vitest + Testing Library: card rendering, search flow incl. loading/not-found/error/retry, history panel incl. signed-out hint/loading/empty/error/delete/click-to-rerun; auth drawer incl. open/mode-switch/close-on-success) |
 | M14 | Clear instructions to run the full application locally | ✅ Done (README) |
 | M15 | Architecture description and write-up of decisions/trade-offs | 🚧 In progress (ARCHITECTURE.md) |
 
