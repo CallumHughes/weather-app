@@ -10,6 +10,7 @@
     "dev": "nx run-many -t dev",
     "build": "nx run-many -t build",
     "check-types": "nx run-many -t check-types",
+    "test": "nx run-many -t test",
     "dev:web": "nx run-many -t dev --projects=web",
     "dev:server": "nx run-many -t dev --projects=server",
     "db:studio": "nx run-many -t db:studio --projects=@weather-app/db",

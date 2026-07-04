@@ -1,0 +1,80 @@
+import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
+import { hasZodFastifySchemaValidationErrors } from "fastify-type-provider-zod";
+
+export const ErrorCodes = {
+  VALIDATION_ERROR: "VALIDATION_ERROR",
+  LOCATION_NOT_FOUND: "LOCATION_NOT_FOUND",
+  UPSTREAM_ERROR: "UPSTREAM_ERROR",
+  UPSTREAM_TIMEOUT: "UPSTREAM_TIMEOUT",
+  INTERNAL_ERROR: "INTERNAL_ERROR",
+} as const;
+
+export type ErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];
+
+/**
+ * Operational error with a client-safe message. Anything thrown as an
+ * AppError is returned to the client as-is (status + code + message);
+ * everything else is masked as a generic 500 INTERNAL_ERROR.
+ */
+export class AppError extends Error {
+  readonly statusCode: number;
+  readonly code: ErrorCode;
+
+  constructor(statusCode: number, code: ErrorCode, message: string) {
+    super(message);
+    this.name = "AppError";
+    this.statusCode = statusCode;
+    this.code = code;
+  }
+}
+
+interface ErrorEnvelope {
+  error: {
+    code: string;
+    message: string;
+  };
+}
+
+function envelope(code: string, message: string): ErrorEnvelope {
+  return { error: { code, message } };
+}
+
+/**
+ * Shared error handler: maps every error to the consistent
+ * `{ error: { code, message } }` envelope.
+ */
+export function errorHandler(
+  error: FastifyError,
+  request: FastifyRequest,
+  reply: FastifyReply,
+): void {
+  if (error instanceof AppError) {
+    if (error.statusCode >= 500) {
+      request.log.error({ err: error }, "request failed");
+    }
+    reply.status(error.statusCode).send(envelope(error.code, error.message));
+    return;
+  }
+
+  if (hasZodFastifySchemaValidationErrors(error)) {
+    const details = error.validation
+      .map((issue) => {
+        const field = issue.instancePath.replace(/^\//, "") || "query";
+        return `${field}: ${issue.message ?? "invalid value"}`;
+      })
+      .join("; ");
+    reply.status(400).send(envelope(ErrorCodes.VALIDATION_ERROR, `Invalid request: ${details}`));
+    return;
+  }
+
+  // Fastify's own validation errors (e.g. missing required querystring keys)
+  if (error.statusCode === 400 && error.code?.startsWith("FST_ERR_VALIDATION")) {
+    reply
+      .status(400)
+      .send(envelope(ErrorCodes.VALIDATION_ERROR, `Invalid request: ${error.message}`));
+    return;
+  }
+
+  request.log.error({ err: error }, "unhandled error");
+  reply.status(500).send(envelope(ErrorCodes.INTERNAL_ERROR, "Something went wrong."));
+}

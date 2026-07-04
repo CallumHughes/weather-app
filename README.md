@@ -41,6 +41,7 @@ DATABASE_URL=postgresql://postgres:password@localhost:5432/weather-app
 BETTER_AUTH_SECRET=<generated secret, see below>
 BETTER_AUTH_URL=http://localhost:3000
 CORS_ORIGIN=http://localhost:3001
+OPENWEATHER_API_KEY=<your OpenWeather API key, see below>
 ```
 
 `apps/web/.env`:
@@ -66,6 +67,12 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
 ```
 
 Paste the output as the value of `BETTER_AUTH_SECRET` in `apps/server/.env`.
+
+### Getting `OPENWEATHER_API_KEY`
+
+Weather data comes from [OpenWeather](https://openweathermap.org). Create (or copy) an API key at [https://home.openweathermap.org/api_keys](https://home.openweathermap.org/api_keys) and paste it as the value of `OPENWEATHER_API_KEY` in `apps/server/.env`. The free tier covers everything this app uses (geocoding + current weather).
+
+Note: newly created OpenWeather keys can take a little while (up to ~an hour) to activate — until then the upstream API returns 401 and weather searches will fail with an upstream error.
 
 ## Database Setup
 
@@ -142,6 +149,8 @@ Environment variables are read from each app's `.env` file (baked into web build
 - Initialize hooks: `pnpm run prepare`
 - Run checks: `pnpm run check`
 
+The pre-commit hook runs lint/format on staged files (Biome via lint-staged) and the full test suite (`pnpm nx run-many -t test`). Nx caching keeps this fast — unaffected projects replay cached results. This acts as a lightweight CI alternative for now; see the decision in [ARCHITECTURE.md](ARCHITECTURE.md).
+
 ## Project Structure
 
 ```
@@ -168,6 +177,7 @@ Tasks are orchestrated by [Nx](https://nx.dev) (with computation caching, so unc
 | Start only the API server | `pnpm nx dev server` | `pnpm run dev:server` |
 | Build all apps | `pnpm nx run-many -t build` | `pnpm run build` |
 | Type-check all projects | `pnpm nx run-many -t check-types` | `pnpm run check-types` |
+| Run all tests (Vitest) | `pnpm nx run-many -t test` | `pnpm run test` |
 
 ### Database
 
