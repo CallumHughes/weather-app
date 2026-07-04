@@ -165,7 +165,7 @@ The OpenAPI 3.1 spec is **generated from the zod route schemas** — the same sc
 
 - **Committed spec + drift test standing in for CI**: `pnpm run docs:generate` writes the spec to `apps/fumadocs/openapi/weather-api.json` (built with in-memory fakes — no DB, network, or env needed) and regenerates the Fumadocs MDX pages from it. A drift test (`apps/server/src/openapi.test.ts`) rebuilds the spec in-memory and compares it against the committed file, so a schema change without regeneration fails the pre-commit suite — the same stopgap-for-CI role as the pre-commit hooks above.
 - **Rendered by Fumadocs, not by the server**: the Fastify app exposes no live docs UI; the docs app (`apps/fumadocs`, `pnpm nx dev fumadocs` on port 4000) renders the committed spec with `fumadocs-openapi`, plus hand-written pages for authentication, errors, and rate limits. `/api/auth/*` is excluded from the spec — it is Better-Auth's surface, documented by a hand-written page (Better-Auth's own OpenAPI plugin is the future path for generating those).
-- **The docs app is not deployed** — local/dev only for now; deploying it belongs with the CI improvement below.
+- **Deployed on Railway alongside the other apps.** The docs app forwards the public API surface (`/api/v1/*`, `/health`) to the Fastify server over the private network via a Next.js rewrite driven by `INTERNAL_SERVER_URL` — the same BFF mechanism the web app uses — so the interactive playground works same-origin (the API's CORS only allows the web app's origin). The rewrite deliberately excludes `/api/auth/*` (not the docs' business) and leaves `/api/search` to the docs app's own search handler. Session-guarded endpoints return their 401 envelope from the playground, since sessions live on the web app's origin.
 
 ## Assumptions
 
@@ -179,7 +179,7 @@ The OpenAPI 3.1 spec is **generated from the zod route schemas** — the same sc
 
 With more time, in rough priority order:
 
-1. **CI pipeline** (GitHub Actions): lint, type-check, and test on every push — including DB integration tests for the Prisma cache/history implementations against a PostgreSQL service container (currently exercised via stubs only) — plus deploying the API docs app alongside it.
+1. **CI pipeline** (GitHub Actions): lint, type-check, and test on every push — including DB integration tests for the Prisma cache/history implementations against a PostgreSQL service container (currently exercised via stubs only).
 2. **Forecast and favourites** — extend the weather provider client and add a favourites model reusing the protected-endpoint pattern from search history.
 3. **E2E coverage** — a Playwright happy path (register → search → see weather → revisit history).
 4. **Observability** — metrics (request duration, upstream latency, cache hit rate) on top of the existing structured logging.

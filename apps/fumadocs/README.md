@@ -14,6 +14,10 @@ pnpm nx dev fumadocs
 
 Open http://localhost:4000 — the root route redirects to `/docs`.
 
+### Interactive playground
+
+The endpoint pages include a "try it" playground. Its default server is `/` (this origin): a rewrite in `next.config.mjs` forwards `/api/v1/*` and `/health` to the API using `INTERNAL_SERVER_URL` — set it in `apps/fumadocs/.env` locally (`http://localhost:3000`, with the server dev process running) and as a private-network reference variable on the deployed service. Without it the rewrite is disabled and the playground only works via the direct `localhost:3000` server entry. Session-guarded endpoints return a 401 envelope from the playground (sessions live on the web app's origin).
+
 ## Regenerating after API changes
 
 When a server route or schema changes, regenerate the spec and the API reference pages from the repo root:

@@ -498,12 +498,12 @@
   },
   "servers": [
     {
-      "url": "http://localhost:3000",
-      "description": "Local development (Fastify directly)"
+      "url": "/",
+      "description": "This origin — proxied to the API (works on the docs site and the web app)"
     },
     {
-      "url": "/",
-      "description": "Production (same-origin via the Next.js BFF proxy)"
+      "url": "http://localhost:3000",
+      "description": "Local development (Fastify directly)"
     }
   ],
   "tags": [

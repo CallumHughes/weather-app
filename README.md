@@ -166,7 +166,7 @@ weather-app/
 ├── apps/
 │   ├── web/         # Frontend application (Next.js)
 │   ├── server/      # Backend API (Fastify)
-│   └── fumadocs/    # API documentation site (Fumadocs, not deployed — local/dev only)
+│   └── fumadocs/    # API documentation site (Fumadocs)
 ├── packages/
 │   ├── ui/          # Shared shadcn/ui components and styles
 │   ├── auth/        # Authentication configuration & logic
