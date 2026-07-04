@@ -42,12 +42,37 @@ export interface HistoryItem {
   createdAt: string;
 }
 
+/** The resolved location of a weather result — the body of POST /api/v1/favourites. */
+export interface FavouriteLocationInput {
+  name: string;
+  country: string;
+  state?: string;
+  lat: number;
+  lon: number;
+}
+
+/** A favourite location as returned by GET /api/v1/favourites. */
+export interface FavouriteItem {
+  id: string;
+  name: string;
+  country: string;
+  state?: string;
+  lat: number;
+  lon: number;
+  /** Manual sort position; null until reordering exists. */
+  sortOrder: number | null;
+  /** ISO 8601 timestamp of when the favourite was saved. */
+  createdAt: string;
+}
+
 /** Error codes the API can return in its `{ error: { code, message } }` envelope. */
 export type ApiErrorCode =
   | "VALIDATION_ERROR"
   | "UNAUTHENTICATED"
   | "NOT_FOUND"
   | "LOCATION_NOT_FOUND"
+  | "ALREADY_FAVOURITE"
+  | "FAVOURITES_LIMIT_REACHED"
   | "UPSTREAM_ERROR"
   | "UPSTREAM_TIMEOUT"
   | "INTERNAL_ERROR"
@@ -113,6 +138,39 @@ export async function getHistory(): Promise<HistoryItem[]> {
 
 export async function deleteHistoryItem(id: string): Promise<void> {
   const response = await fetch(`/api/v1/history/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    throw await parseErrorEnvelope(response);
+  }
+}
+
+/**
+ * The user's favourite locations (manually ordered first, then oldest-first).
+ * Requires a session — the favourites UI only renders when signed in.
+ */
+export async function getFavourites(): Promise<FavouriteItem[]> {
+  const response = await fetch("/api/v1/favourites");
+  if (!response.ok) {
+    throw await parseErrorEnvelope(response);
+  }
+  return (await response.json()) as FavouriteItem[];
+}
+
+export async function addFavourite(location: FavouriteLocationInput): Promise<FavouriteItem> {
+  const response = await fetch("/api/v1/favourites", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(location),
+  });
+  if (!response.ok) {
+    throw await parseErrorEnvelope(response);
+  }
+  return (await response.json()) as FavouriteItem;
+}
+
+export async function deleteFavourite(id: string): Promise<void> {
+  const response = await fetch(`/api/v1/favourites/${encodeURIComponent(id)}`, {
     method: "DELETE",
   });
   if (!response.ok) {

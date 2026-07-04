@@ -124,7 +124,7 @@ Every commit runs lint/format (Biome via lint-staged) **and the full test suite*
 
 - Schema is managed by Prisma migrations (`prisma migrate dev` locally, `prisma migrate deploy` in production) — the migration history in `packages/db/prisma/migrations` is the source of truth, not `db push`.
 - Auth tables (user, session, account, verification) are owned by Better-Auth's Prisma adapter.
-- Domain models (implemented, `packages/db/prisma/schema/app.prisma`): a **weather cache** table (`weather_cache`: key → JSON payload + `expiresAt`) and per-user **search history** (`search_history`, cascade-deleted with the user). PostgreSQL was chosen over Redis for the cache to keep a single datastore at this scale; the cache sits behind a small `CacheStore` interface (`get`/`getStale`/`set` in `apps/server/src/lib/cache.ts`), so a Redis implementation is a drop-in swap without touching callers.
+- Domain models (implemented, `packages/db/prisma/schema/app.prisma`): a **weather cache** table (`weather_cache`: key → JSON payload + `expiresAt`), per-user **search history** (`search_history`) and per-user **favourite locations** (`favourite_location`) — both user-owned tables cascade-delete with the user. PostgreSQL was chosen over Redis for the cache to keep a single datastore at this scale; the cache sits behind a small `CacheStore` interface (`get`/`getStale`/`set` in `apps/server/src/lib/cache.ts`), so a Redis implementation is a drop-in swap without touching callers.
 
 **Weather cache strategy** (`apps/server/src/modules/weather/weather.constants.ts`):
 
@@ -137,7 +137,13 @@ Every commit runs lint/format (Biome via lint-staged) **and the full test suite*
 
 **Search history**: recorded server-side after each successful weather fetch for signed-in users only (anonymous searches are never stored). A consecutive repeat of the same coordinates updates the existing row (timestamp + raw query) instead of inserting; storage is capped at the newest 50 rows per user (older rows evicted on insert). `GET /api/v1/history` returns the newest 10; `DELETE /api/v1/history/:id` is filtered by owner and returns 404 for anything else (never revealing other users' ids). Recording failures are logged and never fail the weather response.
 
-**Testing seam**: the cache (`CacheStore`), history storage (`HistoryRepo`), and session resolution are injected into `buildApp()`, so route tests run with in-memory fakes and stubbed sessions — no test needs a running PostgreSQL or a real session. The trade-off: the Prisma implementations themselves are exercised against stubs, not a real database; DB integration tests via a CI service container are a known gap (see Future improvements).
+**Favourite locations** (`favourite_location`, reusing the protected-endpoint pattern from search history): a signed-in user saves the resolved location of a weather result (star toggle in the UI → `POST /api/v1/favourites`), lists them (`GET /api/v1/favourites`) and removes them (`DELETE /api/v1/favourites/:id`, owner-filtered → 404, exactly like history). Unlike history's evict-oldest cap, favourites are an explicit collection, so the cap of **20 per user rejects** the 21st add (400 `FAVOURITES_LIMIT_REACHED`) rather than silently dropping something the user chose to keep. Duplicates are enforced by a `[userId, lat, lon]` unique key — coordinates come from the 24 h-cached geocode on both the weather and favourites paths, unrounded, so the same place always yields byte-identical floats — and surface as 409 `ALREADY_FAVOURITE` (which the web client treats as stale-state success). The list ordering contract is **`sortOrder ASC NULLS LAST`, then `createdAt ASC`**: `sortOrder` is nullable and *nothing writes it yet* — it is the seam for a future manual-reorder endpoint (e.g. `PUT /api/v1/favourites/order`), which plugs in without a migration; until then every row is null and the list is pure creation order, and after a partial reorder the ordered rows lead while new favourites append at the end.
+
+**Decision — `sortOrder` column, not an ordered array of favourite IDs on the user** (considered and rejected): an ordered-ID array splits one entity across two sources of truth. Postgres cannot enforce FK integrity on array elements, so deletes leave dangling IDs unless every delete also rewrites the array transactionally; every list read becomes reconciliation code (sort by array position, drop dangling IDs, append unordered rows) instead of one indexed `ORDER BY sortOrder NULLS LAST, createdAt`; and concurrent reorders degrade to whole-array last-write-wins. The column keeps order on the row — deleted with the row, all invariants DB-enforced. Conceded trade-off: a full reorder writes up to N rows instead of one array value — trivial under the 20-favourite cap, and the future reorder task can use gapped/fractional values to make single moves one-row writes.
+
+**Decision — store the resolved location (`name`/`country`/`state` + `lat`/`lon`), no provider ID**: OpenWeather's geocoding API returns no stable place ID (its legacy city IDs are deprecated request surface), so coordinates *are* the identity — and they are provider-neutral, surviving a weather-provider swap. The display fields are deliberate denormalisation, the same pattern as `search_history`: the favourites list renders with zero upstream calls, where an ID-only design would need a reverse-geocode per favourite per render. Trade-off: if the geocoder's answer for a city drifts, an existing favourite keeps its saved coordinates/name rather than following the drift — acceptable for a display list the user curates and can re-star.
+
+**Testing seam**: the cache (`CacheStore`), history storage (`HistoryRepo`), favourites storage (`FavouritesRepo`), and session resolution are injected into `buildApp()`, so route tests run with in-memory fakes and stubbed sessions — no test needs a running PostgreSQL or a real session. The trade-off: the Prisma implementations themselves are exercised against stubs, not a real database; DB integration tests via a CI service container are a known gap (see Future improvements).
 
 ### Database access and least privilege
 
@@ -179,13 +185,14 @@ The OpenAPI 3.1 spec is **generated from the zod route schemas** — the same sc
 
 With more time, in rough priority order:
 
-1. **CI pipeline** (GitHub Actions): lint, type-check, and test on every push — including DB integration tests for the Prisma cache/history implementations against a PostgreSQL service container (currently exercised via stubs only).
-2. **Forecast and favourites** — extend the weather provider client and add a favourites model reusing the protected-endpoint pattern from search history.
-3. **E2E coverage** — a Playwright happy path (register → search → see weather → revisit history).
-4. **Observability** — metrics (request duration, upstream latency, cache hit rate) on top of the existing structured logging.
-5. **Password reset / email verification** to round out the auth story.
-6. **Cache maintenance** — a periodic sweep of long-expired `weather_cache` rows (cleanup today is lazy, on read).
-7. **Strict CSP for the web app** — the API ships helmet defaults, but a meaningful `Content-Security-Policy` for the Next.js app needs nonce/hash work around its inline runtime.
+1. **CI pipeline** (GitHub Actions): lint, type-check, and test on every push — including DB integration tests for the Prisma cache/history/favourites implementations against a PostgreSQL service container (currently exercised via stubs only).
+2. **Forecast** — extend the weather provider client with a short forecast endpoint.
+3. **Favourites reordering** — a `PUT /api/v1/favourites/order` endpoint writing the already-present `sortOrder` column (see Data and persistence); the model, ordering contract, and list behaviour need no changes.
+4. **E2E coverage** — a Playwright happy path (register → search → see weather → revisit history).
+5. **Observability** — metrics (request duration, upstream latency, cache hit rate) on top of the existing structured logging.
+6. **Password reset / email verification** to round out the auth story.
+7. **Cache maintenance** — a periodic sweep of long-expired `weather_cache` rows (cleanup today is lazy, on read).
+8. **Strict CSP for the web app** — the API ships helmet defaults, but a meaningful `Content-Security-Policy` for the Next.js app needs nonce/hash work around its inline runtime.
 
 ## Scaling approach
 

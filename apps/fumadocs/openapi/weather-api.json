@@ -3,7 +3,7 @@
   "info": {
     "title": "Weather App API",
     "version": "1.0.0",
-    "description": "REST API for current weather by location and per-user search history.\n\nBase URL model: in production the API is served same-origin under `/api/*` via the Next.js BFF reverse proxy (session cookies stay first-party); in local development the Fastify server is reached directly at `http://localhost:3000`.\n\nAll non-2xx responses use the shared `ErrorEnvelope` shape. Authentication endpoints under `/api/auth/*` are handled by Better-Auth and are documented separately (see the Authentication page)."
+    "description": "REST API for current weather by location, per-user search history and favourite locations.\n\nBase URL model: in production the API is served same-origin under `/api/*` via the Next.js BFF reverse proxy (session cookies stay first-party); in local development the Fastify server is reached directly at `http://localhost:3000`.\n\nAll non-2xx responses use the shared `ErrorEnvelope` shape. Authentication endpoints under `/api/auth/*` are handled by Better-Auth and are documented separately (see the Authentication page)."
   },
   "components": {
     "schemas": {
@@ -15,7 +15,7 @@
             "properties": {
               "code": {
                 "type": "string",
-                "description": "Machine-readable error code (VALIDATION_ERROR, UNAUTHENTICATED, NOT_FOUND, LOCATION_NOT_FOUND, UPSTREAM_ERROR, UPSTREAM_TIMEOUT, RATE_LIMITED, INTERNAL_ERROR)"
+                "description": "Machine-readable error code (VALIDATION_ERROR, UNAUTHENTICATED, NOT_FOUND, LOCATION_NOT_FOUND, ALREADY_FAVOURITE, FAVOURITES_LIMIT_REACHED, UPSTREAM_ERROR, UPSTREAM_TIMEOUT, RATE_LIMITED, INTERNAL_ERROR)"
               },
               "message": {
                 "type": "string",
@@ -84,7 +84,8 @@
                       "type": "object",
                       "properties": {
                         "name": {
-                          "type": "string"
+                          "type": "string",
+                          "description": "Place name the query resolved to"
                         },
                         "country": {
                           "type": "string",
@@ -423,6 +424,350 @@
         }
       }
     },
+    "/api/v1/favourites": {
+      "get": {
+        "operationId": "listFavourites",
+        "summary": "List favourite locations",
+        "tags": [
+          "Favourites"
+        ],
+        "description": "Returns the signed-in user's favourite locations. Manually ordered favourites come first (`sortOrder` ascending — manual reordering is not exposed yet, so `sortOrder` is null for every row today), the rest follow oldest-first. Requires a Better-Auth session cookie — see the Authentication page.",
+        "responses": {
+          "200": {
+            "description": "The user's favourite locations, ordered as described above.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "description": "Favourite id — pass to DELETE /api/v1/favourites/{id}"
+                      },
+                      "name": {
+                        "type": "string",
+                        "description": "Place name the query resolved to"
+                      },
+                      "country": {
+                        "type": "string",
+                        "description": "ISO 3166 country code, e.g. GB"
+                      },
+                      "state": {
+                        "description": "State/region, when the geocoder provides one",
+                        "type": "string"
+                      },
+                      "lat": {
+                        "type": "number"
+                      },
+                      "lon": {
+                        "type": "number"
+                      },
+                      "sortOrder": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Manual sort position. Null until the user reorders (not supported yet): ordered favourites list first, unordered ones follow oldest-first."
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                        "description": "When the favourite was saved (ISO 8601, UTC)"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "country",
+                      "lat",
+                      "lon",
+                      "sortOrder",
+                      "createdAt"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session (`UNAUTHENTICATED`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (`RATE_LIMITED`) — see `retry-after`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error (`INTERNAL_ERROR`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "addFavourite",
+        "summary": "Save a favourite location",
+        "tags": [
+          "Favourites"
+        ],
+        "description": "Saves a resolved location (the `location` object from GET /api/v1/weather) as a favourite. Coordinates are the identity: saving the same `lat`/`lon` twice responds 409, and each user can hold at most 20 favourites. Requires a Better-Auth session cookie — see the Authentication page.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Place name the query resolved to"
+                  },
+                  "country": {
+                    "type": "string",
+                    "description": "ISO 3166 country code, e.g. GB"
+                  },
+                  "state": {
+                    "description": "State/region, when the geocoder provides one",
+                    "type": "string"
+                  },
+                  "lat": {
+                    "type": "number"
+                  },
+                  "lon": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "name",
+                  "country",
+                  "lat",
+                  "lon"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The favourite was saved; the created row is returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "Favourite id — pass to DELETE /api/v1/favourites/{id}"
+                    },
+                    "name": {
+                      "type": "string",
+                      "description": "Place name the query resolved to"
+                    },
+                    "country": {
+                      "type": "string",
+                      "description": "ISO 3166 country code, e.g. GB"
+                    },
+                    "state": {
+                      "description": "State/region, when the geocoder provides one",
+                      "type": "string"
+                    },
+                    "lat": {
+                      "type": "number"
+                    },
+                    "lon": {
+                      "type": "number"
+                    },
+                    "sortOrder": {
+                      "anyOf": [
+                        {
+                          "type": "integer",
+                          "minimum": -9007199254740991,
+                          "maximum": 9007199254740991
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "Manual sort position. Null until the user reorders (not supported yet): ordered favourites list first, unordered ones follow oldest-first."
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                      "description": "When the favourite was saved (ISO 8601, UTC)"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name",
+                    "country",
+                    "lat",
+                    "lon",
+                    "sortOrder",
+                    "createdAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid body (`VALIDATION_ERROR`) or the 20-favourite cap was hit (`FAVOURITES_LIMIT_REACHED`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session (`UNAUTHENTICATED`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "This location is already a favourite (`ALREADY_FAVOURITE`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (`RATE_LIMITED`) — see `retry-after`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error (`INTERNAL_ERROR`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/favourites/{id}": {
+      "delete": {
+        "operationId": "deleteFavourite",
+        "summary": "Remove a favourite location",
+        "tags": [
+          "Favourites"
+        ],
+        "description": "Removes one of the signed-in user's favourites. Favourites that do not exist — or belong to another user — respond 404 (ownership is never revealed). Requires a Better-Auth session cookie — see the Authentication page.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "description": "Favourite id (from GET /api/v1/favourites)"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The favourite was removed. No body."
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`): bad `id` value.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session (`UNAUTHENTICATED`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such favourite for this user (`NOT_FOUND`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (`RATE_LIMITED`) — see `retry-after`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error (`INTERNAL_ERROR`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "operationId": "getHealth",
@@ -514,6 +859,10 @@
     {
       "name": "History",
       "description": "Per-user search history (requires a session)"
+    },
+    {
+      "name": "Favourites",
+      "description": "Per-user favourite locations (requires a session)"
     },
     {
       "name": "Health",

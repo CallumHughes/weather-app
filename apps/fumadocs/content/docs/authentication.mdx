@@ -25,6 +25,9 @@ everything under `/api/auth/*` to it.
 | `GET /api/v1/weather` | Optional — anonymous works; with a session the search is recorded in history |
 | `GET /api/v1/history` | Required |
 | `DELETE /api/v1/history/{id}` | Required |
+| `GET /api/v1/favourites` | Required |
+| `POST /api/v1/favourites` | Required |
+| `DELETE /api/v1/favourites/{id}` | Required |
 | `GET /health` | None |
 
 Guarded endpoints without a valid session respond `401` with the standard

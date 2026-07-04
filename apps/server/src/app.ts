@@ -27,6 +27,10 @@ import {
   RATE_LIMIT_TIME_WINDOW_MS,
   rateLimitErrorResponseBuilder,
 } from "@/lib/rate-limit";
+import type { FavouritesRepo } from "@/modules/favourites/favourites.repo";
+import { PrismaFavouritesRepo } from "@/modules/favourites/favourites.repo";
+import { favouritesRoutes } from "@/modules/favourites/favourites.routes";
+import { FavouritesService } from "@/modules/favourites/favourites.service";
 import type { HistoryRepo } from "@/modules/history/history.repo";
 import { PrismaHistoryRepo } from "@/modules/history/history.repo";
 import { historyRoutes } from "@/modules/history/history.routes";
@@ -63,6 +67,8 @@ export interface BuildAppOptions {
   cacheStore?: CacheStore;
   /** History storage — injectable for tests (defaults to PrismaHistoryRepo). */
   historyRepo?: HistoryRepo;
+  /** Favourites storage — injectable for tests (defaults to PrismaFavouritesRepo). */
+  favouritesRepo?: FavouritesRepo;
   /** Session resolution — injectable for tests (defaults to Better-Auth). */
   getSession?: SessionResolver;
   /** Rate-limit overrides — injectable so tests can use tiny limits. */
@@ -162,6 +168,9 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
   const historyRepo = options.historyRepo ?? new PrismaHistoryRepo(prisma);
   const historyService = new HistoryService(historyRepo);
 
+  const favouritesRepo = options.favouritesRepo ?? new PrismaFavouritesRepo(prisma);
+  const favouritesService = new FavouritesService(favouritesRepo);
+
   const openWeatherClient = new OpenWeatherClient({
     apiKey: env.OPENWEATHER_API_KEY,
     timeoutMs: options.weather?.timeoutMs,
@@ -175,6 +184,7 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
     getOptionalSession,
   });
   fastify.register(historyRoutes, { prefix: "/api/v1", historyService, requireSession });
+  fastify.register(favouritesRoutes, { prefix: "/api/v1", favouritesService, requireSession });
 
   const dbPing = options.health?.dbPing ?? (() => prisma.$queryRaw`SELECT 1`);
   fastify.register(healthRoutes, {

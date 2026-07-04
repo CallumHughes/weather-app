@@ -9,6 +9,7 @@ model User {
   sessions      Session[]
   accounts      Account[]
   searchHistory SearchHistory[]
+  favourites    FavouriteLocation[]
 
   @@unique([email])
   @@map("user")
