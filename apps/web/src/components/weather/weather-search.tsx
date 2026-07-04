@@ -13,10 +13,11 @@ import { Label } from "@weather-app/ui/components/label";
 import { CloudSun, Loader2, SearchX, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 
+import { useAddFavourite, useFavourites, useRemoveFavourite } from "@/hooks/use-favourites";
 import { useWeather } from "@/hooks/use-weather";
 import { ApiError } from "@/lib/api";
 
-import { WeatherCard } from "./weather-card";
+import { WeatherCard, type WeatherCardFavourite } from "./weather-card";
 import { WeatherSkeleton } from "./weather-skeleton";
 
 function isNotFound(error: unknown): boolean {
@@ -42,6 +43,40 @@ export function WeatherSearch({ search, onSearchChange, isSignedIn = false }: We
   }
 
   const query = useWeather(search, { isSignedIn });
+
+  // Star toggle for the current result. The list query is shared with the
+  // Favourites panel (same query key) and disabled while signed out, so
+  // signed-out visitors never trigger a favourites fetch.
+  const favourites = useFavourites(isSignedIn);
+  const addFavourite = useAddFavourite();
+  const removeFavourite = useRemoveFavourite();
+
+  let favouriteAction: WeatherCardFavourite | undefined;
+  if (isSignedIn && query.isSuccess) {
+    const location = query.data.location;
+    // Coordinates are the favourite's identity — they come from the same
+    // cached geocode on both sides, so exact equality is safe.
+    const existing = favourites.data?.find(
+      (item) => item.lat === location.lat && item.lon === location.lon,
+    );
+    favouriteAction = {
+      isFavourite: Boolean(existing),
+      isPending: addFavourite.isPending || removeFavourite.isPending,
+      onToggle: () => {
+        if (existing) {
+          removeFavourite.mutate(existing.id);
+        } else {
+          addFavourite.mutate({
+            name: location.name,
+            country: location.country,
+            ...(location.state !== undefined && { state: location.state }),
+            lat: location.lat,
+            lon: location.lon,
+          });
+        }
+      },
+    };
+  }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -87,8 +122,8 @@ export function WeatherSearch({ search, onSearchChange, isSignedIn = false }: We
       </div>
     );
   } else if (query.isSuccess) {
-    // Success: the weather card.
-    result = <WeatherCard weather={query.data} />;
+    // Success: the weather card (with the favourite star when signed in).
+    result = <WeatherCard weather={query.data} favourite={favouriteAction} />;
   } else {
     // Initial/empty: nothing searched yet.
     result = (

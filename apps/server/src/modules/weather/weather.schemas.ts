@@ -29,17 +29,25 @@ export const cachedGeocodeSchema = z.object({
 
 export type CachedGeocode = z.infer<typeof cachedGeocodeSchema>;
 
+/**
+ * The resolved-location fields of the weather DTO. Shared with the favourites
+ * module: a favourite *is* one of these resolved locations, so the field
+ * schemas must stay identical (coordinates included — see the favourites
+ * unique key) rather than being redefined per module.
+ */
+export const resolvedLocationSchema = z.object({
+  name: z.string().describe("Place name the query resolved to"),
+  country: z.string().describe("ISO 3166 country code, e.g. GB"),
+  state: z.string().optional().describe("State/region, when the geocoder provides one"),
+  lat: z.number(),
+  lon: z.number(),
+});
+
+export type ResolvedLocation = z.infer<typeof resolvedLocationSchema>;
+
 /** Response DTO — the only shape the client ever sees. */
 export const weatherResponseSchema = z.object({
-  location: z
-    .object({
-      name: z.string(),
-      country: z.string().describe("ISO 3166 country code, e.g. GB"),
-      state: z.string().optional().describe("State/region, when the geocoder provides one"),
-      lat: z.number(),
-      lon: z.number(),
-    })
-    .describe("The place the query resolved to"),
+  location: resolvedLocationSchema.describe("The place the query resolved to"),
   current: z.object({
     temperatureC: z.number().describe("Air temperature in °C"),
     feelsLikeC: z.number().describe("Perceived temperature in °C"),

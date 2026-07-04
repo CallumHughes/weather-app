@@ -3,7 +3,13 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { getHistory, getWeather, type HistoryItem } from "@/lib/api";
+import {
+  type FavouriteItem,
+  getFavourites,
+  getHistory,
+  getWeather,
+  type HistoryItem,
+} from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 
 import { londonWeatherFixture } from "./weather.fixtures";
@@ -11,7 +17,15 @@ import { WeatherHome } from "./weather-home";
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
-  return { ...actual, getWeather: vi.fn(), getHistory: vi.fn(), deleteHistoryItem: vi.fn() };
+  return {
+    ...actual,
+    getWeather: vi.fn(),
+    getHistory: vi.fn(),
+    deleteHistoryItem: vi.fn(),
+    getFavourites: vi.fn(),
+    addFavourite: vi.fn(),
+    deleteFavourite: vi.fn(),
+  };
 });
 
 vi.mock("@/lib/auth-client", () => ({
@@ -20,6 +34,7 @@ vi.mock("@/lib/auth-client", () => ({
 
 const getWeatherMock = vi.mocked(getWeather);
 const getHistoryMock = vi.mocked(getHistory);
+const getFavouritesMock = vi.mocked(getFavourites);
 const useSessionMock = vi.mocked(authClient.useSession);
 
 const londonHistoryItem: HistoryItem = {
@@ -54,7 +69,11 @@ function renderHome() {
 beforeEach(() => {
   getWeatherMock.mockReset();
   getHistoryMock.mockReset();
+  getFavouritesMock.mockReset();
   useSessionMock.mockReset();
+  // The favourites panel and star toggle fetch this when signed in; the
+  // history-focused tests only need it to resolve.
+  getFavouritesMock.mockResolvedValue([]);
 });
 
 describe("WeatherHome", () => {
@@ -71,6 +90,39 @@ describe("WeatherHome", () => {
     expect(getWeatherMock).toHaveBeenCalledWith("London");
     // The re-run also fills the search input with the resolved name.
     expect(screen.getByLabelText("City")).toHaveValue("London");
+  });
+
+  it("clicking a favourite triggers a weather search for that location", async () => {
+    setSession(true);
+    getHistoryMock.mockResolvedValue([]);
+    const favourite: FavouriteItem = {
+      id: "f1",
+      name: "London",
+      country: "GB",
+      state: "England",
+      lat: 51.5073219,
+      lon: -0.1276474,
+      sortOrder: null,
+      createdAt: new Date().toISOString(),
+    };
+    getFavouritesMock.mockResolvedValue([favourite]);
+    getWeatherMock.mockResolvedValue(londonWeatherFixture);
+    renderHome();
+
+    await screen.findByTestId("favourites-list");
+    await userEvent.click(screen.getByRole("button", { name: "London, England, GB" }));
+
+    expect(await screen.findByTestId("weather-card")).toBeInTheDocument();
+    expect(getWeatherMock).toHaveBeenCalledWith("London");
+    expect(screen.getByLabelText("City")).toHaveValue("London");
+  });
+
+  it("signed out: renders no favourites panel and never fetches favourites", async () => {
+    setSession(false);
+    renderHome();
+
+    expect(screen.queryByTestId("favourites")).not.toBeInTheDocument();
+    expect(getFavouritesMock).not.toHaveBeenCalled();
   });
 
   it("invalidates the history query after a successful signed-in search", async () => {

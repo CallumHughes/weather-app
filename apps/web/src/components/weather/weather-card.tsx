@@ -1,10 +1,13 @@
+import { Button } from "@weather-app/ui/components/button";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@weather-app/ui/components/card";
+import { Star } from "lucide-react";
 
 import type { WeatherResponse } from "@/lib/api";
 
@@ -21,8 +24,23 @@ function formatObservedAt(iso: string): string {
   });
 }
 
+/** Star-toggle state and callback, provided by the container when signed in. */
+export interface WeatherCardFavourite {
+  isFavourite: boolean;
+  /** Disables the toggle while an add/remove mutation is in flight. */
+  isPending: boolean;
+  onToggle: () => void;
+}
+
 /** Presentational: renders the weather DTO, does no fetching. */
-export function WeatherCard({ weather }: { weather: WeatherResponse }) {
+export function WeatherCard({
+  weather,
+  favourite,
+}: {
+  weather: WeatherResponse;
+  /** Omitted when signed out — the star is not rendered at all. */
+  favourite?: WeatherCardFavourite;
+}) {
   const { location, current } = weather;
   const place = [location.name, location.state, location.country].filter(Boolean).join(", ");
 
@@ -31,6 +49,28 @@ export function WeatherCard({ weather }: { weather: WeatherResponse }) {
       <CardHeader>
         <CardTitle>{place}</CardTitle>
         <CardDescription>Observed at {formatObservedAt(current.observedAt)}</CardDescription>
+        {favourite && (
+          <CardAction>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-pressed={favourite.isFavourite}
+              aria-label={
+                favourite.isFavourite
+                  ? `Remove ${location.name} from favourites`
+                  : `Add ${location.name} to favourites`
+              }
+              disabled={favourite.isPending}
+              onClick={favourite.onToggle}
+            >
+              <Star
+                aria-hidden="true"
+                className={favourite.isFavourite ? "fill-current" : undefined}
+              />
+            </Button>
+          </CardAction>
+        )}
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="flex items-center gap-3">

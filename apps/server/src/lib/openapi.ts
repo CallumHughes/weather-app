@@ -86,7 +86,8 @@ export const openApiOptions: FastifyDynamicSwaggerOptions = {
       title: "Weather App API",
       version: "1.0.0",
       description:
-        "REST API for current weather by location and per-user search history.\n\n" +
+        "REST API for current weather by location, per-user search history and " +
+        "favourite locations.\n\n" +
         "Base URL model: in production the API is served same-origin under `/api/*` " +
         "via the Next.js BFF reverse proxy (session cookies stay first-party); in local " +
         "development the Fastify server is reached directly at `http://localhost:3000`.\n\n" +
@@ -107,6 +108,7 @@ export const openApiOptions: FastifyDynamicSwaggerOptions = {
     tags: [
       { name: "Weather", description: "Current weather lookups" },
       { name: "History", description: "Per-user search history (requires a session)" },
+      { name: "Favourites", description: "Per-user favourite locations (requires a session)" },
       { name: "Health", description: "Service health for infrastructure probes" },
     ],
   },

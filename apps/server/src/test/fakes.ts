@@ -6,6 +6,11 @@
 
 import type { SessionResolver } from "@/lib/auth-guard";
 import type { CacheStore } from "@/lib/cache";
+import type {
+  FavouriteRecord,
+  FavouritesRepo,
+  NewFavourite,
+} from "@/modules/favourites/favourites.repo";
 import type { HistoryRecord, HistoryRepo, NewSearch } from "@/modules/history/history.repo";
 
 interface CacheEntry {
@@ -137,6 +142,79 @@ export class InMemoryHistoryRepo implements HistoryRepo {
       const index = this.rows.indexOf(row);
       this.rows.splice(index, 1);
     }
+  }
+}
+
+/** FavouritesRepo fake implementing the same primitives as PrismaFavouritesRepo. */
+export class InMemoryFavouritesRepo implements FavouritesRepo {
+  readonly rows: FavouriteRecord[] = [];
+  private nextId = 1;
+
+  /**
+   * Seed a row directly (bypasses the cap/duplicate checks — that logic
+   * lives in the service). `sortOrder` is settable here — production code
+   * never writes it — so ordering tests can simulate a future manual reorder.
+   */
+  seed(
+    userId: string,
+    favourite: NewFavourite,
+    createdAt: Date,
+    sortOrder: number | null = null,
+  ): FavouriteRecord {
+    const record: FavouriteRecord = {
+      id: `f${this.nextId++}`,
+      userId,
+      name: favourite.name,
+      country: favourite.country,
+      state: favourite.state ?? null,
+      lat: favourite.lat,
+      lon: favourite.lon,
+      sortOrder,
+      createdAt,
+    };
+    this.rows.push(record);
+    return record;
+  }
+
+  async listForUser(userId: string): Promise<FavouriteRecord[]> {
+    // Mirrors the Prisma ordering contract: sortOrder ASC NULLS LAST, then
+    // createdAt ASC (insertion-order tie-break for sub-millisecond inserts).
+    return this.rows
+      .filter((row) => row.userId === userId)
+      .sort((a, b) => {
+        if (a.sortOrder !== b.sortOrder) {
+          if (a.sortOrder === null) return 1;
+          if (b.sortOrder === null) return -1;
+          return a.sortOrder - b.sortOrder;
+        }
+        return (
+          a.createdAt.getTime() - b.createdAt.getTime() ||
+          Number.parseInt(a.id.slice(1), 10) - Number.parseInt(b.id.slice(1), 10)
+        );
+      });
+  }
+
+  async countForUser(userId: string): Promise<number> {
+    return this.rows.filter((row) => row.userId === userId).length;
+  }
+
+  async create(userId: string, favourite: NewFavourite): Promise<FavouriteRecord | null> {
+    const duplicate = this.rows.some(
+      (row) => row.userId === userId && row.lat === favourite.lat && row.lon === favourite.lon,
+    );
+    if (duplicate) {
+      return null;
+    }
+    return this.seed(userId, favourite, new Date());
+  }
+
+  async deleteOwned(userId: string, id: string): Promise<boolean> {
+    const index = this.rows.findIndex((row) => row.id === id && row.userId === userId);
+    if (index === -1) {
+      return false;
+    }
+    this.rows.splice(index, 1);
+    return true;
   }
 }
 

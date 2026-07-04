@@ -6,7 +6,12 @@
  */
 
 import { buildApp } from "@/app";
-import { InMemoryCacheStore, InMemoryHistoryRepo, stubSession } from "@/test/fakes";
+import {
+  InMemoryCacheStore,
+  InMemoryFavouritesRepo,
+  InMemoryHistoryRepo,
+  stubSession,
+} from "@/test/fakes";
 
 /** JSON object shape of the generated OpenAPI document. */
 export type OpenApiDocument = Record<string, unknown>;
@@ -24,6 +29,7 @@ export async function buildOpenApiSpec(): Promise<OpenApiDocument> {
     logger: false,
     cacheStore: new InMemoryCacheStore(),
     historyRepo: new InMemoryHistoryRepo(),
+    favouritesRepo: new InMemoryFavouritesRepo(),
     getSession: stubSession(null),
     health: { dbPing: async () => 1 },
   });

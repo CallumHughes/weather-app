@@ -53,7 +53,7 @@ Nice-to-haves from the brief's optional enhancements, in rough value-per-effort 
 | C1 | CI pipeline (lint, type-check, test on push) | ⬜ To do |
 | C2 | API documentation (OpenAPI/Swagger generated from route schemas) | ✅ Done (OpenAPI 3.1 spec generated from the zod route schemas via `@fastify/swagger`, committed at `apps/fumadocs/openapi/weather-api.json` with a spec-drift test, rendered by the Fumadocs app on `pnpm nx dev fumadocs`; regenerate with `pnpm run docs:generate`) |
 | C3 | Short forecast (extended weather data) | ⬜ To do |
-| C4 | Favourite locations (save/manage) | ⬜ To do |
+| C4 | Favourite locations (save/manage) | ✅ Done (star toggle on the weather result + Favourites panel; `GET/POST /api/v1/favourites`, `DELETE /api/v1/favourites/:id` behind the session guard; 20-favourite cap, duplicates rejected on the `[userId, lat, lon]` unique key; manual reordering is a documented follow-up — the `sortOrder` column and ordering contract are already in place) |
 | C5 | Response compression | ⬜ To do |
 | C6 | Pagination on search history | ⬜ To do |
 | C7 | One E2E happy-path test (Playwright) | ⬜ To do |

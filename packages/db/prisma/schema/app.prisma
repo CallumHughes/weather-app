@@ -9,6 +9,27 @@ model WeatherCache {
   @@map("weather_cache")
 }
 
+model FavouriteLocation {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  country   String
+  state     String?
+  lat       Float
+  lon       Float
+  // Manual ordering seam: null until the user reorders (a future task —
+  // this app never writes it). Lists order by sortOrder ASC NULLS LAST,
+  // then createdAt ASC, so unordered rows append in creation order.
+  sortOrder Int?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lat, lon])
+  @@index([userId, sortOrder, createdAt])
+  @@map("favourite_location")
+}
+
 model SearchHistory {
   id           String   @id @default(cuid())
   userId       String

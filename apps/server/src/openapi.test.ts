@@ -34,6 +34,8 @@ describe("OpenAPI spec", () => {
   it("documents exactly the public API surface (no auth proxy, no internals)", async () => {
     const spec = await buildOpenApiSpec();
     expect(Object.keys(spec.paths as object).sort()).toEqual([
+      "/api/v1/favourites",
+      "/api/v1/favourites/{id}",
       "/api/v1/history",
       "/api/v1/history/{id}",
       "/api/v1/weather",
