@@ -1,0 +1,146 @@
+# Architecture
+
+Design decisions, trade-offs, assumptions, and future improvements. See [REQUIREMENTS.md](REQUIREMENTS.md) for scope and status.
+
+## System overview
+
+```mermaid
+graph LR
+  B[Browser]
+  subgraph Web["apps/web — Next.js :3001"]
+    UI[React UI]
+    RW["/api/* rewrite (BFF proxy)"]
+  end
+  subgraph API["apps/server — Fastify :3000"]
+    AUTH[Better-Auth handler]
+    WX[Weather routes]
+  end
+  DB[(PostgreSQL)]
+  EXT[Public weather API]
+
+  B -->|same-origin requests| Web
+  RW -->|INTERNAL_SERVER_URL, private network| API
+  AUTH --> DB
+  WX -->|planned| DB
+  WX -->|planned| EXT
+```
+
+- The browser only ever talks to the web app's origin. Requests to `/api/*` are transparently rewritten by Next.js to the Fastify server over the private network (`INTERNAL_SERVER_URL`).
+- The Fastify server is the single intermediary to the external weather provider and owns all persistence.
+- Both apps are containerised and deployed on Railway; the same topology runs locally via Docker Compose.
+
+## Key decisions
+
+### Monorepo
+
+Single repository with pnpm workspaces and Nx task orchestration:
+
+```
+apps/web        Next.js front-end
+apps/server     Fastify API
+packages/db     Prisma schema, migrations, client
+packages/auth   Better-Auth configuration
+packages/env    Zod-validated environment schemas
+packages/ui     Shared shadcn/ui components
+packages/config Shared TS config
+```
+
+**Why a monorepo:** the front-end and back-end share types (API contracts, env schemas, auth types) with no publishing step; one set of tooling (Biome, Husky, TypeScript config); atomic commits across the stack; a single repo to clone and run. Nx adds task caching and orchestration (`nx run-many`) so builds and checks only re-run what changed.
+
+**Trade-off:** more upfront structure than a two-folder repo, and workspace tooling (pnpm + Nx) is something reviewers/new contributors must be comfortable with.
+
+### Scaffolding with Better-T-Stack
+
+The project was scaffolded with [create-better-t-stack](https://github.com/AmanVarshney01/create-better-t-stack). It wires up modern tooling (monorepo layout, auth, ORM, linting, Docker) out of the box, which saved significant setup time and let the development effort go into the domain: the weather API, persistence, and the front-end experience.
+
+**Trade-off:** some generated structure exists ahead of need, and the stack choices are partly inherited from the scaffold rather than picked one-by-one — the table below justifies each retained choice.
+
+### Technology choices
+
+| Technology | Role | Why |
+|------------|------|-----|
+| TypeScript | Language across the whole stack | _TODO_ |
+| Next.js (App Router) | Front-end framework | _TODO_ |
+| React | UI library | _TODO_ |
+| Tailwind CSS | Styling | _TODO_ |
+| shadcn/ui (`packages/ui`) | UI component primitives | _TODO_ |
+| Fastify | Back-end HTTP framework | _TODO_ |
+| Node.js | Server runtime | _TODO_ |
+| PostgreSQL | Database | _TODO_ |
+| Prisma | ORM and migrations | _TODO_ |
+| Better-Auth | Authentication (email/password, sessions) | _TODO_ |
+| Zod | Schema validation (env, API input) | _TODO_ |
+| @t3-oss/env | Fail-fast environment variable validation | _TODO_ |
+| TanStack Form | Form state and validation | _TODO_ |
+| evlog | Structured request/error logging | _TODO_ |
+| Nx | Monorepo task orchestration and caching | _TODO_ |
+| pnpm workspaces | Package management | _TODO_ |
+| Biome | Linting and formatting | _TODO_ |
+| Husky + lint-staged | Pre-commit quality gates | _TODO_ |
+| Docker + Compose | Containerisation, local full-stack runs | _TODO_ |
+| Railway | Hosting (web, server, PostgreSQL) | _TODO_ |
+
+### BFF reverse proxy (same-origin API)
+
+The web app fronts the API using a backend-for-frontend pattern: a Next.js rewrite forwards `/api/:path*` to the Fastify server (`next.config.ts`), addressed via `INTERNAL_SERVER_URL` over the private network.
+
+**Why:** session cookies only work reliably when the API is on the same domain as the page — with a separate public API URL, cookies become third-party and run into browser restrictions. Proxying makes every browser request same-origin, so the session cookie stays first-party (`httpOnly`, `secure`, `sameSite=lax`), there is no CORS complexity in the browser, and the API's location is not baked into the client bundle. It is also simple: one rewrite rule, no extra infrastructure.
+
+In a larger system the BFF would typically be its own layer — a tRPC or GraphQL server tailored to the front-end — sitting in front of domain APIs running as separate microservices (weather, auth, etc.). Here, Fastify serves as the BFF directly, and auth plus all subsequent routes live in that one service. This is a deliberate delivery-focused choice: one service to build, test, deploy, and reason about, with the same-origin/cookie benefits of the pattern intact. The seams are still in place — routes are modular within Fastify, so a domain could be extracted into its own service behind a dedicated BFF later without changing what the browser sees.
+
+**Consequences:**
+
+- There is no `NEXT_PUBLIC_SERVER_URL`; the client calls relative `/api/...` paths and only the web app's server environment knows where the API lives (`INTERNAL_SERVER_URL`).
+- Server-side rendering calls the API directly over the private network with the same variable (see `apps/web/src/lib/auth-client.ts`).
+- **Trade-off:** browser traffic takes an extra hop through the Next.js server, adding a small amount of latency and coupling API availability to the web app's proxy. Acceptable at this scale; a shared edge/API gateway would replace it if the apps needed to scale independently.
+
+### Containerised deployment
+
+Both apps are packaged as Docker containers (`apps/*/Dockerfile`, with the Next.js app built in standalone output mode), composed together with PostgreSQL in `docker-compose.yml`.
+
+**Why:** the REST API requirement means the back-end is a long-running service in its own right, which maps naturally to a container rather than to per-app serverless/platform-specific deployments. Containerising everything keeps deployment uniform and portable: the whole application — web, API, and database — runs with a single `docker compose up` locally, and the same images deploy to any provider that runs containers (Railway in this case) without provider-specific build tooling. One deployment model for all parts of the app is simpler to reason about than a different pipeline per app.
+
+**Scope:** container *scaling* (orchestration, replicas, autoscaling) is deliberately not a concern at this stage — the containers are treated as single instances. The stateless-API design keeps horizontal scaling available later (see [Scaling approach](#scaling-approach)), but nothing in the current setup is built for it.
+
+### Data and persistence
+
+- Schema is managed by Prisma migrations (`prisma migrate dev` locally, `prisma migrate deploy` in production) — the migration history in `packages/db/prisma/migrations` is the source of truth, not `db push`.
+- Auth tables (user, session, account, verification) are owned by Better-Auth's Prisma adapter.
+- Planned domain models: per-user **search history** and a **weather cache** table keyed by location with a TTL, so repeated searches within the TTL window are served from PostgreSQL instead of the external API. PostgreSQL was chosen over Redis for the cache to keep a single datastore at this scale; the cache access pattern is isolated so it could be swapped for Redis without touching callers.
+
+### Database access and least privilege
+
+The application currently connects with the database's main credentials. That is a conscious simplification for delivery at this scale, and it is the first thing that would change when hardening or scaling:
+
+1. **Split runtime from migrations** (applies even to the current single service): the app connects with a role granted DML only (`SELECT`/`INSERT`/`UPDATE`/`DELETE` on the app tables), while `prisma migrate deploy` runs with a separate role that holds DDL rights. A compromised runtime credential then cannot alter the schema or drop tables.
+2. **Per-service roles**: if services are split out (see the BFF section), each gets its own credential scoped to the tables it owns — enabling revocation, audit attribution, and blast-radius containment per service.
+3. **Auth data ownership**: were the auth service separated, it would become the sole owner of the auth tables (user, session, account, verification) — not just the only writer. Other services would obtain identity from the session/token via the auth service's API rather than reading its tables, because direct cross-service table reads couple every consumer to auth's schema migrations. Schema-per-service (and eventually database-per-service) enforces this ownership by topology rather than by grants.
+
+## Assumptions
+
+- Small user base and a single deployment region; no high-availability requirements.
+- The external weather provider is generally available; on upstream failure the API degrades gracefully with a meaningful error (and can serve stale cache where present) rather than retrying aggressively.
+- Weather data freshness on the order of minutes is acceptable (drives the cache TTL).
+- No PII is stored beyond email address and name for authentication.
+- Modern evergreen browsers; no legacy browser support.
+
+## Future improvements
+
+With more time, in rough priority order:
+
+1. **CI pipeline** (GitHub Actions): lint, type-check, and test on every push.
+2. **OpenAPI documentation** generated from the Fastify route schemas, so docs cannot drift from the implementation.
+3. **Forecast and favourites** — extend the weather provider client and add a favourites model reusing the protected-endpoint pattern from search history.
+4. **E2E coverage** — a Playwright happy path (register → search → see weather → revisit history).
+5. **Observability** — metrics (request duration, upstream latency, cache hit rate) on top of the existing structured logging.
+6. **Password reset / email verification** to round out the auth story.
+
+## Scaling approach
+
+The current design targets the assignment's scale; the path beyond it:
+
+- **Stateless API**: the Fastify server keeps no in-process state (sessions are in PostgreSQL, cache in PostgreSQL), so it can scale horizontally behind a load balancer today.
+- **Cache**: move the weather cache (and rate-limit counters) to Redis so instances share state and reads stop hitting PostgreSQL.
+- **Database**: connection pooling (e.g. PgBouncer) ahead of read replicas; search history is append-heavy and trivially partitionable by user.
+- **Edge**: replace the Next.js rewrite with a CDN/edge gateway routing `/api/*` and static assets independently, decoupling web and API scaling.
+- **Provider limits**: the server-side cache already amortises external API calls; a request coalescer (single flight per location) would cap upstream traffic under burst load.

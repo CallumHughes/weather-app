@@ -30,9 +30,6 @@
     "dev": {
       "cache": false
     },
-    "db:push": {
-      "cache": false
-    },
     "db:generate": {
       "cache": false
     },
