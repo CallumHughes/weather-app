@@ -16,13 +16,13 @@ graph LR
     WX[Weather routes]
   end
   DB[(PostgreSQL)]
-  EXT[Public weather API]
+  EXT[OpenWeather API]
 
   B -->|same-origin requests| Web
   RW -->|INTERNAL_SERVER_URL, private network| API
   AUTH --> DB
-  WX -->|planned| DB
-  WX -->|planned| EXT
+  WX -->|planned: cache + history| DB
+  WX --> EXT
 ```
 
 - The browser only ever talks to the web app's origin. Requests to `/api/*` are transparently rewritten by Next.js to the Fastify server over the private network (`INTERNAL_SERVER_URL`).
@@ -72,6 +72,8 @@ The project was scaffolded with [create-better-t-stack](https://github.com/AmanV
 | Zod | Schema validation (env, API input) | _TODO_ |
 | @t3-oss/env | Fail-fast environment variable validation | _TODO_ |
 | TanStack Form | Form state and validation | _TODO_ |
+| TanStack Query | Server-state management on the front-end | Declarative fetch lifecycle (loading/error/success) with caching, request de-duplication, and selective retries out of the box — replaces hand-rolled effect/state plumbing and keeps data logic out of presentational components |
+| OpenWeather | External weather data provider | Clear API documentation and a large community/support ecosystem; free tier covers geocoding + current weather (see [Weather provider](#weather-provider-openweather)) |
 | evlog | Structured request/error logging | _TODO_ |
 | Nx | Monorepo task orchestration and caching | _TODO_ |
 | pnpm workspaces | Package management | _TODO_ |
@@ -79,6 +81,12 @@ The project was scaffolded with [create-better-t-stack](https://github.com/AmanV
 | Husky + lint-staged | Pre-commit quality gates | _TODO_ |
 | Docker + Compose | Containerisation, local full-stack runs | _TODO_ |
 | Railway | Hosting (web, server, PostgreSQL) | _TODO_ |
+
+### Weather provider: OpenWeather
+
+Weather data comes from [OpenWeather](https://openweathermap.org): its geocoding API resolves free-text location searches to coordinates, and the current-weather API supplies conditions (both on the free tier). OpenWeather was chosen for its clearer API documentation and its larger community and support ecosystem compared with alternatives.
+
+**Trade-off vs Open-Meteo:** Open-Meteo needs no API key at all, so choosing OpenWeather buys the documentation/community benefits at the cost of API-key management. That cost is contained by design: the key lives server-side only (`OPENWEATHER_API_KEY` in the server environment) and the browser never talks to the provider — all weather traffic goes through the Fastify API per the BFF section, so the key can never leak into the client bundle. Upstream responses are validated with lenient zod schemas and mapped to our own DTO, so the provider could be swapped without changing the client-facing contract.
 
 ### BFF reverse proxy (same-origin API)
 
@@ -101,6 +109,14 @@ Both apps are packaged as Docker containers (`apps/*/Dockerfile`, with the Next.
 **Why:** the REST API requirement means the back-end is a long-running service in its own right, which maps naturally to a container rather than to per-app serverless/platform-specific deployments. Containerising everything keeps deployment uniform and portable: the whole application — web, API, and database — runs with a single `docker compose up` locally, and the same images deploy to any provider that runs containers (Railway in this case) without provider-specific build tooling. One deployment model for all parts of the app is simpler to reason about than a different pipeline per app.
 
 **Scope:** container *scaling* (orchestration, replicas, autoscaling) is deliberately not a concern at this stage — the containers are treated as single instances. The stateless-API design keeps horizontal scaling available later (see [Scaling approach](#scaling-approach)), but nothing in the current setup is built for it.
+
+### Pre-commit quality gates instead of CI (for now)
+
+Every commit runs lint/format (Biome via lint-staged) **and the full test suite** (`nx run-many -t test`) through the husky pre-commit hook.
+
+**Why:** with a single developer and no shared branches yet, a pre-commit test run is an easy CI alternative — it gives the core CI guarantee (no commit lands with failing tests) with zero infrastructure. Nx's computation caching keeps it fast: projects unaffected by the commit replay cached results rather than re-running.
+
+**Trade-off:** hooks run on the developer's machine and can be skipped (`--no-verify`), and nothing validates the pushed state or fresh-clone builds. That is what a real CI pipeline adds, and it remains the first item under [Future improvements](#future-improvements); this hook is the stopgap, not the end state.
 
 ### Data and persistence
 

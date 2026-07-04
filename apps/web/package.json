@@ -5,11 +5,13 @@
   "scripts": {
     "dev": "next dev --port 3001",
     "build": "next build && ([ -d public ] && cp -r public .next/standalone/apps/web/public || true) && cp -r .next/static .next/standalone/apps/web/.next/static",
-    "start": "node .next/standalone/apps/web/server.js"
+    "start": "node .next/standalone/apps/web/server.js",
+    "test": "vitest run"
   },
   "dependencies": {
     "@swc/helpers": "^0.5.23",
     "@tanstack/react-form": "^1.28.0",
+    "@tanstack/react-query": "^5.101.2",
     "@weather-app/env": "workspace:*",
     "@weather-app/ui": "workspace:*",
     "babel-plugin-react-compiler": "^1.0.0",
@@ -26,11 +28,17 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "catalog:",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^20",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "^6.0.3",
     "@weather-app/config": "workspace:*",
+    "jsdom": "^29.1.1",
     "tailwindcss": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "^4.1.9"
   }
 }
