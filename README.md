@@ -2,11 +2,16 @@
 
 This project was created with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack), a modern TypeScript stack that combines Next.js, Fastify, and more.
 
+## Live deployment
+
+- Weather app: [https://weather-app-web-production.up.railway.app](https://weather-app-web-production.up.railway.app)
+- API docs: [https://weather-app-fumadocs-production.up.railway.app](https://weather-app-fumadocs-production.up.railway.app)
+
 ## Documentation
 
 - [REQUIREMENTS.md](REQUIREMENTS.md) — MoSCoW-prioritised requirements and their current status
 - [ARCHITECTURE.md](ARCHITECTURE.md) — design decisions, trade-offs, assumptions, and future improvements
-- API documentation — OpenAPI generated from the route schemas, rendered by the Fumadocs app: `pnpm nx dev fumadocs` → [http://localhost:4000/docs](http://localhost:4000/docs) (regenerate with `pnpm run docs:generate`)
+- API documentation — OpenAPI generated from the route schemas, rendered by the Fumadocs app: [hosted docs](https://fumadocs-production-ce19.up.railway.app/docs), or locally with `pnpm nx dev fumadocs` → [http://localhost:4000/docs](http://localhost:4000/docs) (regenerate with `pnpm run docs:generate`)
 
 ## Features
 
