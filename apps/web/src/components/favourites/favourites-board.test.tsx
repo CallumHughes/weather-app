@@ -121,6 +121,18 @@ describe("FavouritesBoard", () => {
     expect(screen.queryByRole("button", { name: /Reorder/ })).not.toBeInTheDocument();
   });
 
+  it("hides every drag handle while an optimistic add is pending", () => {
+    // A pending row still has its temporary `optimistic:` id — a reorder
+    // containing it would be rejected by the server as out-of-sync.
+    renderBoard([
+      { ...favourite("f9", "Madrid"), id: "optimistic:9,9", pending: true },
+      favourite("f2", "Paris"),
+      favourite("f3", "Berlin"),
+    ]);
+
+    expect(screen.queryByRole("button", { name: /Reorder/ })).not.toBeInTheDocument();
+  });
+
   it("clicking the trash button removes the favourite", async () => {
     renderBoard(THREE);
 

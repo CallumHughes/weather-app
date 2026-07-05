@@ -99,7 +99,11 @@ export function FavouritesBoard({ isSignedIn }: FavouritesBoardProps) {
     );
   }
 
-  const canDrag = items.length > 1;
+  // No dragging while an optimistic add is pending: the reorder payload is
+  // the complete id list, and a temporary `optimistic:` id in it would make
+  // the server reject the whole set as out-of-sync. Handles return once the
+  // add settles and the real row (with its real id) replaces the pending one.
+  const canDrag = items.length > 1 && items.every((item) => !item.pending);
 
   return (
     <div
