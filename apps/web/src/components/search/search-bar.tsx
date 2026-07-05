@@ -9,16 +9,13 @@ import {
 import { Search } from "lucide-react";
 import { useState } from "react";
 
-export interface WeatherSearchProps {
-  /** The submitted search — lifted so the history panel can re-run searches. */
-  search: string;
-  /** Fired with the trimmed term on every submit, even when it hasn't changed
-   *  (re-submitting the same city re-opens the result dialog). */
-  onSubmit: (term: string) => void;
-}
+import { useSearch } from "@/hooks/use-search";
 
-/** The search bar only — results render in the parent's dialog. */
-export function WeatherSearch({ search, onSubmit }: WeatherSearchProps) {
+/** The search bar only — results render in the result dialog. */
+export function SearchBar() {
+  // Every submit — even of an unchanged term — goes through submitSearch so
+  // re-searching the same city re-opens the result dialog.
+  const { search, submitSearch } = useSearch();
   const [input, setInput] = useState(search);
   // Sync the input field when something else (the history panel) sets the
   // search — the "adjust state during render" pattern, no effect needed.
@@ -32,7 +29,7 @@ export function WeatherSearch({ search, onSubmit }: WeatherSearchProps) {
     event.preventDefault();
     const next = input.trim();
     if (next) {
-      onSubmit(next);
+      submitSearch(next);
     }
   }
 

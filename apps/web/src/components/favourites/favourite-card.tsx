@@ -10,9 +10,8 @@ import {
   CardTitle,
 } from "@weather-app/ui/components/card";
 import { GripVertical, MapPin, Trash2 } from "lucide-react";
-
-import type { OptimisticFavourite } from "./favourites-board";
-import { WeatherCard } from "./weather-card";
+import type { OptimisticFavourite } from "@/providers/favourites-provider";
+import { WeatherCard } from "../weather-card";
 
 export interface FavouriteCardProps {
   favourite: OptimisticFavourite;

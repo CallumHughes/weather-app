@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { londonWeatherFixture } from "@/components/weather/weather.fixtures";
+import { londonWeatherFixture } from "@/components/weather.fixtures";
 
 import { getWeather } from "./api";
 

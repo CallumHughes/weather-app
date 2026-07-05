@@ -1,9 +1,24 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { FavouritesBoard, type OptimisticFavourite } from "./favourites-board";
-import { londonWeatherFixture } from "./weather.fixtures";
+import { removeFavouriteAction, reorderFavouritesAction } from "@/app/actions/favourites";
+import { FavouritesProvider, type OptimisticFavourite } from "@/providers/favourites-provider";
+import { londonWeatherFixture } from "../weather.fixtures";
+import { FavouritesBoard } from "./favourites-board";
+
+vi.mock("@/app/actions/favourites", () => ({
+  addFavouriteAction: vi.fn(),
+  removeFavouriteAction: vi.fn(),
+  reorderFavouritesAction: vi.fn(),
+}));
+
+vi.mock("sonner", () => ({
+  toast: { error: vi.fn() },
+}));
+
+const removeFavouriteActionMock = vi.mocked(removeFavouriteAction);
+const reorderFavouritesActionMock = vi.mocked(reorderFavouritesAction);
 
 function favourite(id: string, name: string): OptimisticFavourite {
   return {
@@ -21,17 +36,11 @@ function favourite(id: string, name: string): OptimisticFavourite {
 const THREE = [favourite("f1", "London"), favourite("f2", "Paris"), favourite("f3", "Berlin")];
 
 function renderBoard(favourites: OptimisticFavourite[], overrides: { isSignedIn?: boolean } = {}) {
-  const onRemove = vi.fn();
-  const onReorder = vi.fn();
   render(
-    <FavouritesBoard
-      favourites={favourites}
-      isSignedIn={overrides.isSignedIn ?? true}
-      onRemove={onRemove}
-      onReorder={onReorder}
-    />,
+    <FavouritesProvider favourites={favourites}>
+      <FavouritesBoard isSignedIn={overrides.isSignedIn ?? true} />
+    </FavouritesProvider>,
   );
-  return { onRemove, onReorder };
 }
 
 function cardNames(): string[] {
@@ -49,6 +58,13 @@ function cardWrapper(name: string): HTMLElement {
   return card.parentElement;
 }
 
+beforeEach(() => {
+  removeFavouriteActionMock.mockReset();
+  reorderFavouritesActionMock.mockReset();
+  removeFavouriteActionMock.mockResolvedValue({ ok: true });
+  reorderFavouritesActionMock.mockResolvedValue({ ok: true });
+});
+
 describe("FavouritesBoard", () => {
   it("renders the favourites as cards in order", () => {
     renderBoard(THREE);
@@ -60,15 +76,17 @@ describe("FavouritesBoard", () => {
     ]);
   });
 
-  it("drag: mousedown on the handle, hover another card, mouseup commits the new order", () => {
-    const { onReorder } = renderBoard(THREE);
+  it("drag: mousedown on the handle, hover another card, mouseup commits the new order", async () => {
+    renderBoard(THREE);
 
     fireEvent.mouseDown(screen.getByRole("button", { name: "Reorder London" }));
     // Hover Berlin: London is spliced into Berlin's position (insertion, not swap).
     fireEvent.mouseOver(cardWrapper("Berlin"));
     fireEvent.mouseUp(window);
 
-    expect(onReorder).toHaveBeenCalledExactlyOnceWith(["f2", "f3", "f1"]);
+    await waitFor(() =>
+      expect(reorderFavouritesActionMock).toHaveBeenCalledExactlyOnceWith(["f2", "f3", "f1"]),
+    );
   });
 
   it("reorders live while hovering, before the drop", () => {
@@ -88,13 +106,13 @@ describe("FavouritesBoard", () => {
     expect(cardWrapper("London")).toHaveClass("opacity-50");
   });
 
-  it("does not call onReorder when the drag ends where it started", () => {
-    const { onReorder } = renderBoard(THREE);
+  it("does not persist a reorder when the drag ends where it started", () => {
+    renderBoard(THREE);
 
     fireEvent.mouseDown(screen.getByRole("button", { name: "Reorder London" }));
     fireEvent.mouseUp(window);
 
-    expect(onReorder).not.toHaveBeenCalled();
+    expect(reorderFavouritesActionMock).not.toHaveBeenCalled();
   });
 
   it("hides the drag handle when there is only one favourite", () => {
@@ -103,12 +121,12 @@ describe("FavouritesBoard", () => {
     expect(screen.queryByRole("button", { name: /Reorder/ })).not.toBeInTheDocument();
   });
 
-  it("clicking the trash button calls onRemove with the id", async () => {
-    const { onRemove } = renderBoard(THREE);
+  it("clicking the trash button removes the favourite", async () => {
+    renderBoard(THREE);
 
     await userEvent.click(screen.getByRole("button", { name: "Remove Paris from favourites" }));
 
-    expect(onRemove).toHaveBeenCalledExactlyOnceWith("f2");
+    await waitFor(() => expect(removeFavouriteActionMock).toHaveBeenCalledExactlyOnceWith("f2"));
   });
 
   it("renders a degraded card (still removable) when the weather is unavailable", () => {

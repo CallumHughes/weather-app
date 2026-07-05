@@ -7,8 +7,13 @@ import { addFavouriteAction, removeFavouriteAction } from "@/app/actions/favouri
 
 import { type FavouriteWithWeather, getHistory, getWeather, type HistoryItem } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
+import { FavouritesProvider } from "@/providers/favourites-provider";
+import { SearchProvider } from "@/providers/search-provider";
+import { FavouritesBoard } from "./favourites/favourites-board";
+import { SearchHistory } from "./history/search-history";
+import { SearchBar } from "./search/search-bar";
+import { SearchResultDialog } from "./search/search-result-dialog";
 import { londonWeatherFixture } from "./weather.fixtures";
-import { WeatherHome } from "./weather-home";
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
@@ -69,6 +74,28 @@ function setSession(signedIn: boolean) {
   } as unknown as ReturnType<typeof authClient.useSession>);
 }
 
+/** Mirrors the client tree app/page.tsx + FavouritesSection compose (both are
+ *  async server components, so they can't render in jsdom): the search state
+ *  wraps everything, the favourites provider only the board and the dialog. */
+function HomeShell({
+  isSignedIn,
+  favourites,
+}: {
+  isSignedIn: boolean;
+  favourites: FavouriteWithWeather[];
+}) {
+  return (
+    <SearchProvider>
+      <SearchBar />
+      <FavouritesProvider favourites={favourites}>
+        <FavouritesBoard isSignedIn={isSignedIn} />
+        <SearchResultDialog isSignedIn={isSignedIn} />
+      </FavouritesProvider>
+      <SearchHistory isSignedIn={isSignedIn} />
+    </SearchProvider>
+  );
+}
+
 function renderHome({ isSignedIn = true, favourites = [] as FavouriteWithWeather[] } = {}) {
   setSession(isSignedIn);
   const queryClient = new QueryClient({
@@ -76,7 +103,7 @@ function renderHome({ isSignedIn = true, favourites = [] as FavouriteWithWeather
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <WeatherHome isSignedIn={isSignedIn} favourites={favourites} />
+      <HomeShell isSignedIn={isSignedIn} favourites={favourites} />
     </QueryClientProvider>,
   );
 }
@@ -90,7 +117,7 @@ beforeEach(() => {
   getHistoryMock.mockResolvedValue([]);
 });
 
-describe("WeatherHome", () => {
+describe("home page composition", () => {
   it("submitting a search opens the result dialog with the weather card", async () => {
     getWeatherMock.mockResolvedValue(londonWeatherFixture);
     renderHome();

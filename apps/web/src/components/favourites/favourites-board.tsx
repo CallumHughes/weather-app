@@ -12,48 +12,28 @@ import { produce } from "immer";
 import { Star } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
-
-import type { FavouriteWithWeather } from "@/lib/api";
-
+import { useFavourites } from "@/hooks/use-favourites";
+import { favouriteLayoutId } from "@/providers/favourites-provider";
 import { FavouriteCard } from "./favourite-card";
 
-/** A favourite as held in optimistic state: pending until the action lands. */
-export type OptimisticFavourite = FavouriteWithWeather & { pending?: boolean };
-
-/**
- * Shared-element id linking a location across surfaces (search dialog →
- * board). Keyed by coordinates — the favourite's identity — rather than the
- * row id, which changes when the optimistic row is replaced by the real one.
- */
-export function favouriteLayoutId(lat: number, lon: number): string {
-  return `favourite:${lat}:${lon}`;
-}
-
 export interface FavouritesBoardProps {
-  favourites: OptimisticFavourite[];
   isSignedIn: boolean;
-  onRemove: (id: string) => void;
-  /** Fired on drag end with the complete id list in the new display order. */
-  onReorder: (ids: string[]) => void;
 }
 
 /**
  * The favourites list with self-managed drag reordering: mousedown on a
  * card's grip handle starts a drag, hovering another card splices the dragged
  * card into its position (insertion, not swap), and mouseup commits the new
- * order via onReorder. Mouse-only by design — touch reordering is a follow-up.
+ * order via reorderFavourites. Mouse-only by design — touch reordering is a
+ * follow-up.
  */
-export function FavouritesBoard({
-  favourites,
-  isSignedIn,
-  onRemove,
-  onReorder,
-}: FavouritesBoardProps) {
+export function FavouritesBoard({ isSignedIn }: FavouritesBoardProps) {
+  const { favourites, removeFavourite, reorderFavourites } = useFavourites();
   // Working copy of the list so hover-reordering stays local until mouseup.
   const [items, setItems] = useState(favourites);
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  // Sync from props (adjust-state-during-render) except mid-drag, where the
-  // local order is ahead of the optimistic props and must not be clobbered.
+  // Sync from context (adjust-state-during-render) except mid-drag, where the
+  // local order is ahead of the optimistic list and must not be clobbered.
   const [prevFavourites, setPrevFavourites] = useState(favourites);
   if (favourites !== prevFavourites) {
     setPrevFavourites(favourites);
@@ -73,15 +53,15 @@ export function FavouritesBoard({
         items.length !== favourites.length ||
         items.some((item, index) => item.id !== favourites[index]?.id);
       if (orderChanged) {
-        onReorder(items.map((item) => item.id));
+        reorderFavourites(items.map((item) => item.id));
       } else {
-        // Nothing moved: pick up any prop updates skipped during the drag.
+        // Nothing moved: pick up any updates skipped during the drag.
         setItems(favourites);
       }
     }
     window.addEventListener("mouseup", endDrag);
     return () => window.removeEventListener("mouseup", endDrag);
-  }, [draggingId, items, favourites, onReorder]);
+  }, [draggingId, items, favourites, reorderFavourites]);
 
   function handleHoverOverCard(overIndex: number) {
     if (draggingId === null) {
@@ -144,7 +124,7 @@ export function FavouritesBoard({
           >
             <FavouriteCard
               favourite={favourite}
-              onRemove={onRemove}
+              onRemove={removeFavourite}
               onDragStart={canDrag ? setDraggingId : undefined}
             />
           </motion.div>

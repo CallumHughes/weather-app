@@ -14,43 +14,37 @@ import { CloudOff, MapPinOff, RefreshCw } from "lucide-react";
 import { motion } from "motion/react";
 
 import { AuthDrawer } from "@/components/auth/auth-drawer";
+import { useFavourites } from "@/hooks/use-favourites";
+import { useSearch } from "@/hooks/use-search";
 import { useWeather } from "@/hooks/use-weather";
 import { ApiError, type WeatherResult } from "@/lib/api";
-
-import { favouriteLayoutId } from "./favourites-board";
-import { WeatherCard } from "./weather-card";
-import { WeatherSkeleton } from "./weather-skeleton";
+import { favouriteLayoutId } from "@/providers/favourites-provider";
+import { WeatherCard } from "../weather-card";
+import { WeatherSkeleton } from "../weather-skeleton";
 
 function isNotFound(error: unknown): boolean {
   return error instanceof ApiError && (error.code === "LOCATION_NOT_FOUND" || error.status === 404);
 }
 
 export interface SearchResultDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  /** The submitted search term; the dialog owns the weather query for it. */
-  search: string;
   isSignedIn: boolean;
-  /** True when the resolved location is already in the (optimistic) favourites. */
-  isSaved: (lat: number, lon: number) => boolean;
-  /** Add the result to favourites (signed in only) — the parent closes the dialog. */
-  onAdd: (weather: WeatherResult) => void;
 }
 
 /**
  * The search result in a centred dialog (all screen sizes): loading skeleton,
  * not-found/error states, then the weather card with Cancel (left) and
- * Add / Sign in to save (right).
+ * Add / Sign in to save (right). Owns the weather query for the submitted
+ * search; Add closes the dialog and hands the result to the favourites.
  */
-export function SearchResultDialog({
-  open,
-  onOpenChange,
-  search,
-  isSignedIn,
-  isSaved,
-  onAdd,
-}: SearchResultDialogProps) {
+export function SearchResultDialog({ isSignedIn }: SearchResultDialogProps) {
+  const { search, dialogOpen, setDialogOpen } = useSearch();
+  const { isSaved, addFavourite } = useFavourites();
   const query = useWeather(search, { isSignedIn });
+
+  function handleAdd(weather: WeatherResult) {
+    setDialogOpen(false);
+    addFavourite(weather);
+  }
 
   let body: React.ReactNode;
   if (query.isFetching) {
@@ -116,7 +110,7 @@ export function SearchResultDialog({
       <Button
         type="button"
         disabled={!query.isSuccess}
-        onClick={() => query.isSuccess && onAdd(query.data)}
+        onClick={() => query.isSuccess && handleAdd(query.data)}
       >
         Add
       </Button>
@@ -124,7 +118,7 @@ export function SearchResultDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
       <DialogContent data-testid="search-result-dialog">
         <DialogHeader>
           <DialogTitle>Search result</DialogTitle>
@@ -132,7 +126,7 @@ export function SearchResultDialog({
         </DialogHeader>
         <div aria-live="polite">{body}</div>
         <DialogFooter className="sm:justify-between">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
             Cancel
           </Button>
           {addButton}

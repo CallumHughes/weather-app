@@ -7,6 +7,7 @@ import { History, Trash2 } from "lucide-react";
 
 import { AuthDrawer } from "@/components/auth/auth-drawer";
 import { useDeleteHistoryItem, useHistory } from "@/hooks/use-history";
+import { useSearch } from "@/hooks/use-search";
 import type { HistoryItem } from "@/lib/api";
 import { formatRelativeTime } from "@/lib/format";
 
@@ -20,11 +21,11 @@ export interface SearchHistoryProps {
    * from authClient.useSession() so SSR and hydration agree deterministically.
    */
   isSignedIn: boolean;
-  /** Re-run a past search (sets the lifted search state). */
-  onSelect: (location: string) => void;
 }
 
-export function SearchHistory({ isSignedIn, onSelect }: SearchHistoryProps) {
+export function SearchHistory({ isSignedIn }: SearchHistoryProps) {
+  // Clicking a row re-runs that search (fills the bar, opens the dialog).
+  const { submitSearch } = useSearch();
   const history = useHistory(isSignedIn);
   const deleteItem = useDeleteHistoryItem();
 
@@ -75,7 +76,7 @@ export function SearchHistory({ isSignedIn, onSelect }: SearchHistoryProps) {
           <li key={item.id} className="group flex items-center gap-1">
             <button
               type="button"
-              onClick={() => onSelect(item.resolvedName)}
+              onClick={() => submitSearch(item.resolvedName)}
               className="flex min-w-0 flex-1 items-baseline justify-between gap-2 py-2 text-left text-sm hover:text-foreground"
             >
               <span className="truncate">{locationLabel(item)}</span>

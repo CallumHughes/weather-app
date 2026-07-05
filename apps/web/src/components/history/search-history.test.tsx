@@ -2,9 +2,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
+import { useSearch } from "@/hooks/use-search";
 import { deleteHistoryItem, getHistory, type HistoryItem } from "@/lib/api";
-
+import { SearchProvider } from "@/providers/search-provider";
 import { SearchHistory } from "./search-history";
 
 vi.mock("@/lib/api", async (importOriginal) => {
@@ -34,16 +34,27 @@ function historyItem(overrides: Partial<HistoryItem> = {}): HistoryItem {
   };
 }
 
-function renderPanel(
-  onSelect: (location: string) => void = () => {},
-  { isSignedIn = true }: { isSignedIn?: boolean } = {},
-) {
+/** Exposes the shared search state a history row click writes into. */
+function SearchProbe() {
+  const { search, dialogOpen } = useSearch();
+  return (
+    <>
+      <output data-testid="submitted-search">{search}</output>
+      <output data-testid="dialog-open">{String(dialogOpen)}</output>
+    </>
+  );
+}
+
+function renderPanel({ isSignedIn = true }: { isSignedIn?: boolean } = {}) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <SearchHistory isSignedIn={isSignedIn} onSelect={onSelect} />
+      <SearchProvider>
+        <SearchHistory isSignedIn={isSignedIn} />
+        <SearchProbe />
+      </SearchProvider>
     </QueryClientProvider>,
   );
 }
@@ -55,7 +66,7 @@ beforeEach(() => {
 
 describe("SearchHistory", () => {
   it("signed out: renders the sign-in hint and never fetches history", async () => {
-    renderPanel(undefined, { isSignedIn: false });
+    renderPanel({ isSignedIn: false });
 
     const hint = screen.getByTestId("history-signed-out");
     expect(hint).toHaveTextContent("Sign in to keep your search history");
@@ -64,7 +75,7 @@ describe("SearchHistory", () => {
   });
 
   it("signed out: the hint opens the auth drawer instead of linking to a login page", async () => {
-    renderPanel(undefined, { isSignedIn: false });
+    renderPanel({ isSignedIn: false });
 
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
     await userEvent.click(
@@ -137,14 +148,14 @@ describe("SearchHistory", () => {
     expect(screen.getByText(/Paris/)).toBeInTheDocument();
   });
 
-  it("clicking a row re-runs that search via onSelect", async () => {
+  it("clicking a row re-runs that search (sets the term, opens the dialog)", async () => {
     getHistoryMock.mockResolvedValue([historyItem()]);
-    const onSelect = vi.fn();
-    renderPanel(onSelect);
+    renderPanel();
 
     await screen.findByTestId("history-list");
     await userEvent.click(screen.getByRole("button", { name: /London, England, GB/ }));
 
-    expect(onSelect).toHaveBeenCalledWith("London");
+    expect(screen.getByTestId("submitted-search")).toHaveTextContent("London");
+    expect(screen.getByTestId("dialog-open")).toHaveTextContent("true");
   });
 });

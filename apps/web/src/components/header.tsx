@@ -1,6 +1,6 @@
 import { Cloud } from "lucide-react";
 
-import { AccountChip } from "./account-chip";
+import { AccountChip } from "./auth/account-chip";
 import { ModeToggle } from "./mode-toggle";
 
 export default function Header() {
@@ -9,7 +9,7 @@ export default function Header() {
       <div className="mx-auto flex w-full items-center justify-between px-4 py-2">
         <span className="flex items-center gap-2 font-medium">
           <Cloud aria-hidden="true" className="size-4" />
-          Weather
+          Weather App
         </span>
         <div className="flex items-center gap-2">
           <ModeToggle />

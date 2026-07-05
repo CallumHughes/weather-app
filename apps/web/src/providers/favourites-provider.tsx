@@ -1,6 +1,6 @@
 "use client";
 
-import { useOptimistic, useState, useTransition } from "react";
+import { createContext, useOptimistic, useTransition } from "react";
 import { toast } from "sonner";
 
 import {
@@ -10,10 +10,17 @@ import {
 } from "@/app/actions/favourites";
 import type { FavouriteWithWeather, WeatherResult } from "@/lib/api";
 
-import { FavouritesBoard, type OptimisticFavourite } from "./favourites-board";
-import { SearchHistory } from "./search-history";
-import { SearchResultDialog } from "./search-result-dialog";
-import { WeatherSearch } from "./weather-search";
+/** A favourite as held in optimistic state: pending until the action lands. */
+export type OptimisticFavourite = FavouriteWithWeather & { pending?: boolean };
+
+/**
+ * Shared-element id linking a location across surfaces (search dialog →
+ * board). Keyed by coordinates — the favourite's identity — rather than the
+ * row id, which changes when the optimistic row is replaced by the real one.
+ */
+export function favouriteLayoutId(lat: number, lon: number): string {
+  return `favourite:${lat}:${lon}`;
+}
 
 type FavouritesOptimisticAction =
   | { type: "add"; favourite: OptimisticFavourite }
@@ -41,33 +48,40 @@ function applyFavouritesAction(
   }
 }
 
-export interface WeatherHomeProps {
-  isSignedIn: boolean;
+export interface FavouritesContextValue {
+  /** Optimistic favourites in display order. */
+  favourites: OptimisticFavourite[];
+  /** True when the coordinates are already in the (optimistic) list. */
+  isSaved: (lat: number, lon: number) => boolean;
+  /** Optimistically prepend the search result, then persist it. */
+  addFavourite: (weather: WeatherResult) => void;
+  removeFavourite: (id: string) => void;
+  /** Persist a new display order (complete id list). */
+  reorderFavourites: (ids: string[]) => void;
+}
+
+/** Consumed via useFavourites (hooks/use-favourites.ts). */
+export const FavouritesContext = createContext<FavouritesContextValue | null>(null);
+
+export interface FavouritesProviderProps {
   /** Server-fetched favourites (with weather) in display order. */
   favourites: FavouriteWithWeather[];
+  children: React.ReactNode;
 }
 
 /**
- * Client shell of the home page: owns the submitted search (the form, the
- * result dialog and the history panel all drive it) and the optimistic
- * favourites list that the dialog adds to and the board removes/reorders.
+ * Owns the optimistic favourites list and the server actions that mutate it:
+ * the search dialog adds to it, the board removes and reorders. Failures
+ * toast and let the optimistic state revert to the server list.
  */
-export function WeatherHome({ isSignedIn, favourites }: WeatherHomeProps) {
-  const [search, setSearch] = useState("");
-  const [dialogOpen, setDialogOpen] = useState(false);
+export function FavouritesProvider({ favourites, children }: FavouritesProviderProps) {
   const [optimisticFavourites, applyOptimistic] = useOptimistic(
     favourites as OptimisticFavourite[],
     applyFavouritesAction,
   );
   const [, startTransition] = useTransition();
 
-  function handleSearch(term: string) {
-    setSearch(term);
-    setDialogOpen(true);
-  }
-
-  function handleAdd(weather: WeatherResult) {
-    setDialogOpen(false);
+  function addFavourite(weather: WeatherResult) {
     const { location, current } = weather;
     startTransition(async () => {
       applyOptimistic({
@@ -100,7 +114,7 @@ export function WeatherHome({ isSignedIn, favourites }: WeatherHomeProps) {
     });
   }
 
-  function handleRemove(id: string) {
+  function removeFavourite(id: string) {
     startTransition(async () => {
       applyOptimistic({ type: "remove", id });
       const result = await removeFavouriteAction(id);
@@ -110,7 +124,7 @@ export function WeatherHome({ isSignedIn, favourites }: WeatherHomeProps) {
     });
   }
 
-  function handleReorder(ids: string[]) {
+  function reorderFavourites(ids: string[]) {
     startTransition(async () => {
       applyOptimistic({ type: "reorder", ids });
       const result = await reorderFavouritesAction(ids);
@@ -127,27 +141,16 @@ export function WeatherHome({ isSignedIn, favourites }: WeatherHomeProps) {
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <WeatherSearch search={search} onSubmit={handleSearch} />
-      <SearchResultDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        search={search}
-        isSignedIn={isSignedIn}
-        isSaved={isSaved}
-        onAdd={handleAdd}
-      />
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <FavouritesBoard
-          favourites={optimisticFavourites}
-          isSignedIn={isSignedIn}
-          onRemove={handleRemove}
-          onReorder={handleReorder}
-        />
-        <div className="flex flex-col gap-6">
-          <SearchHistory isSignedIn={isSignedIn} onSelect={handleSearch} />
-        </div>
-      </div>
-    </div>
+    <FavouritesContext.Provider
+      value={{
+        favourites: optimisticFavourites,
+        isSaved,
+        addFavourite,
+        removeFavourite,
+        reorderFavourites,
+      }}
+    >
+      {children}
+    </FavouritesContext.Provider>
   );
 }

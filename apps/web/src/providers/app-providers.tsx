@@ -26,7 +26,7 @@ function createQueryClient() {
   });
 }
 
-export default function Providers({ children }: { children: React.ReactNode }) {
+export default function AppProviders({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(createQueryClient);
 
   return (

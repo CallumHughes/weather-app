@@ -23,8 +23,8 @@ import { useIsMobile } from "@weather-app/ui/hooks/use-mobile";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import SignInForm from "@/components/sign-in-form";
-import SignUpForm from "@/components/sign-up-form";
+import SignInForm from "./sign-in-form";
+import SignUpForm from "./sign-up-form";
 
 type AuthMode = "sign-in" | "sign-up";
 

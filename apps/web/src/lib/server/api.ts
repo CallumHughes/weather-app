@@ -8,7 +8,12 @@
 import { env } from "@weather-app/env/web";
 import { headers } from "next/headers";
 
-import type { CurrentWeather, FavouriteItem, WeatherCacheStatus } from "@/lib/api";
+import type {
+  CurrentWeather,
+  FavouriteItem,
+  FavouriteWithWeather,
+  WeatherCacheStatus,
+} from "@/lib/api";
 
 export async function serverFetch(path: string, init?: RequestInit): Promise<Response> {
   const incoming = await headers();
@@ -56,6 +61,17 @@ export async function getFavouritesServer(): Promise<FavouriteItem[]> {
   } catch {
     return [];
   }
+}
+
+/** Favourites joined with their current conditions (null current on lookup failure). */
+export async function getFavouritesWithWeather(): Promise<FavouriteWithWeather[]> {
+  const favourites = await getFavouritesServer();
+  return Promise.all(
+    favourites.map(async (favourite) => {
+      const weather = await getCurrentWeatherByCoords(favourite.lat, favourite.lon);
+      return { ...favourite, current: null, ...weather };
+    }),
+  );
 }
 
 /**
