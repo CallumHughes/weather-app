@@ -22,6 +22,7 @@ services:
     build:
       context: .
       dockerfile: apps/server/Dockerfile
+    image: weather-app-server
     init: true
     ports:
       - "3000:3000"
@@ -46,7 +47,27 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
+
+  # One-shot: applies pending Prisma migrations before the server starts.
+  # Reuses the server image (it contains the workspace and the prisma CLI);
+  # `prisma migrate deploy` only applies committed migrations, never creates
+  # or resets anything, so it is safe to run on every `docker compose up`.
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    image: weather-app-server
+    working_dir: /app
+    command: ["pnpm", "--filter", "@weather-app/db", "run", "db:migrate:deploy"]
+    environment:
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-password}@postgres:5432/weather-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
 
   postgres:
     image: postgres
