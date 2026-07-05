@@ -12,6 +12,7 @@ import { produce } from "immer";
 import { Star } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
+import { AuthDrawer } from "@/components/auth/auth-drawer";
 import { useFavourites } from "@/hooks/use-favourites";
 import { favouriteLayoutId } from "@/providers/favourites-provider";
 import { FavouriteCard } from "./favourite-card";
@@ -90,16 +91,37 @@ export function FavouritesBoard({ isSignedIn }: FavouritesBoardProps) {
           </EmptyMedia>
           <EmptyTitle>No favourites yet</EmptyTitle>
           <EmptyDescription>
-            {isSignedIn
-              ? "Search for a city and add it to your favourites."
-              : "Search for a city, then sign in to save it here."}
+            {isSignedIn ? (
+              "Search for a city and add it to your favourites."
+            ) : (
+              // Same sign-in affordance as the recent-searches placeholder:
+              // the link opens the auth drawer rather than a /login page.
+              <>
+                Search for a city, then{" "}
+                <AuthDrawer
+                  trigger={
+                    <button
+                      type="button"
+                      className="underline underline-offset-4 hover:text-foreground"
+                    >
+                      sign in
+                    </button>
+                  }
+                />{" "}
+                to save it here.
+              </>
+            )}
           </EmptyDescription>
         </EmptyHeader>
       </Empty>
     );
   }
 
-  const canDrag = items.length > 1;
+  // No dragging while an optimistic add is pending: the reorder payload is
+  // the complete id list, and a temporary `optimistic:` id in it would make
+  // the server reject the whole set as out-of-sync. Handles return once the
+  // add settles and the real row (with its real id) replaces the pending one.
+  const canDrag = items.length > 1 && items.every((item) => !item.pending);
 
   return (
     <div

@@ -23,8 +23,8 @@
       "dependsOn": ["^check-types"],
       "inputs": ["default", "^default"]
     },
-    "check": {
-      "inputs": ["default", "^default"],
+    "lint": {
+      "inputs": ["default", "{workspaceRoot}/biome.json"],
       "cache": true
     },
     "dev": {

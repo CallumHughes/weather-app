@@ -25,6 +25,7 @@
     "docker:up": "docker compose up -d --build",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f",
+    "lint": "nx run-many -t lint",
     "check": "biome check --write .",
     "prepare": "husky"
   },
@@ -38,14 +39,21 @@
     "@types/node": "^22.13.14",
     "@weather-app/config": "workspace:*",
     "husky": "^9.1.7",
-    "lint-staged": "^17.0.7",
     "nx": "^22.7.5",
     "typescript": "catalog:"
   },
-  "lint-staged": {
-    "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc}": [
-      "biome check --write ."
-    ]
+  "nx": {
+    "includedScripts": [],
+    "targets": {
+      "lint": {
+        "command": "biome check --no-errors-on-unmatched *.json *.jsonc",
+        "cache": true,
+        "inputs": [
+          "{workspaceRoot}/*.json",
+          "{workspaceRoot}/*.jsonc"
+        ]
+      }
+    }
   },
   "packageManager": "pnpm@10.32.1"
 }

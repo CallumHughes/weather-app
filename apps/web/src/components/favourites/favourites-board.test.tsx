@@ -17,6 +17,11 @@ vi.mock("sonner", () => ({
   toast: { error: vi.fn() },
 }));
 
+// The signed-out empty state renders AuthDrawer, whose forms import the auth client.
+vi.mock("@/lib/auth-client", () => ({
+  authClient: { useSession: vi.fn(() => ({ data: null, isPending: false })) },
+}));
+
 const removeFavouriteActionMock = vi.mocked(removeFavouriteAction);
 const reorderFavouritesActionMock = vi.mocked(reorderFavouritesAction);
 
@@ -121,6 +126,18 @@ describe("FavouritesBoard", () => {
     expect(screen.queryByRole("button", { name: /Reorder/ })).not.toBeInTheDocument();
   });
 
+  it("hides every drag handle while an optimistic add is pending", () => {
+    // A pending row still has its temporary `optimistic:` id — a reorder
+    // containing it would be rejected by the server as out-of-sync.
+    renderBoard([
+      { ...favourite("f9", "Madrid"), id: "optimistic:9,9", pending: true },
+      favourite("f2", "Paris"),
+      favourite("f3", "Berlin"),
+    ]);
+
+    expect(screen.queryByRole("button", { name: /Reorder/ })).not.toBeInTheDocument();
+  });
+
   it("clicking the trash button removes the favourite", async () => {
     renderBoard(THREE);
 
@@ -153,5 +170,13 @@ describe("FavouritesBoard", () => {
     expect(screen.getByTestId("favourites-empty")).toHaveTextContent(
       "Search for a city, then sign in to save it here.",
     );
+  });
+
+  it("signed out: the sign-in link opens the auth drawer", async () => {
+    renderBoard([], { isSignedIn: false });
+
+    await userEvent.click(screen.getByRole("button", { name: "sign in" }));
+
+    expect(screen.getByText("Sign in to keep favourites and search history.")).toBeInTheDocument();
   });
 });

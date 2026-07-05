@@ -11,7 +11,9 @@ export type {
   WeatherCache,
 } from "../prisma/generated/client";
 
-export function createPrismaClient() {
+// Not exported: everything shares the singleton below so the process
+// holds a single connection pool (Better-Auth included).
+function createPrismaClient() {
   const adapter = new PrismaPg({
     connectionString: env.DATABASE_URL,
   });

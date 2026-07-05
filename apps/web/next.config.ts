@@ -10,6 +10,17 @@ const nextConfig: NextConfig = {
   reactCompiler: true,
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../.."),
+  images: {
+    // OpenWeather condition icons (weather-card.tsx), served through the
+    // Next image optimizer so the browser never fetches from the provider.
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "openweathermap.org",
+        pathname: "/img/wn/**",
+      },
+    ],
+  },
   async headers() {
     // Minimal hardening header set. A strict CSP is deliberately out of
     // scope (Next's inline runtime makes it a project of its own).

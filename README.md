@@ -33,25 +33,15 @@ pnpm install
 
 ## Environment Variables
 
-Each app reads its own `.env` file. Create them before first run.
+Each app reads its own `.env` file. Copy the committed examples and fill in the placeholders:
 
-`apps/server/.env`:
-
-```dotenv
-DATABASE_URL=postgresql://postgres:password@localhost:5432/weather-app
-BETTER_AUTH_SECRET=<generated secret, see below>
-BETTER_AUTH_URL=http://localhost:3000
-CORS_ORIGIN=http://localhost:3001
-OPENWEATHER_API_KEY=<your OpenWeather API key, see below>
+```bash
+cp apps/server/.env.example apps/server/.env
+cp apps/web/.env.example apps/web/.env
+cp apps/fumadocs/.env.example apps/fumadocs/.env   # only needed to run the API docs app
 ```
 
-`apps/web/.env`:
-
-```dotenv
-INTERNAL_SERVER_URL=http://localhost:3000
-```
-
-All variables are validated at startup by the schemas in `packages/env` — the apps fail fast with a clear error if anything is missing or malformed.
+Only `apps/server/.env` has placeholders to replace: `BETTER_AUTH_SECRET` and `OPENWEATHER_API_KEY` (both below). All variables are validated at startup by the schemas in `packages/env` — the apps fail fast with a clear error if anything is missing or malformed (including unedited placeholders).
 
 ### Generating `BETTER_AUTH_SECRET`
 
@@ -143,12 +133,14 @@ If you want to add app-specific blocks instead of shared primitives, run the sha
 
 ### Docker Compose
 
-- Target: web + server
+- Target: web + server + PostgreSQL
 - Config: `docker-compose.yml` (app Dockerfiles live in `apps/*/Dockerfile`)
 - Build images: pnpm run docker:build
 - Start: pnpm run docker:up
 - Logs: pnpm run docker:logs
 - Stop: pnpm run docker:down
+
+Database migrations run automatically: a one-shot `migrate` service applies pending Prisma migrations (`prisma migrate deploy`) after PostgreSQL is healthy and before the server starts, so a fresh `pnpm run docker:up` brings up a fully working stack.
 
 Environment variables are read from each app's `.env` file (baked into web builds for public variables) and overridden in `docker-compose.yml` for container networking.
 
@@ -157,7 +149,7 @@ Environment variables are read from each app's `.env` file (baked into web build
 - Initialize hooks: `pnpm run prepare`
 - Run checks: `pnpm run check`
 
-The pre-commit hook runs lint/format on staged files (Biome via lint-staged) and the full test suite (`pnpm nx run-many -t test`). Nx caching keeps this fast — unaffected projects replay cached results. This acts as a lightweight CI alternative for now; see the decision in [ARCHITECTURE.md](ARCHITECTURE.md).
+The pre-commit hook runs Biome lint and the full test suite across every project (`pnpm nx run-many -t lint test`). Both are Nx-managed targets, so Nx caching keeps this fast — unaffected projects replay cached results. The workspace root is itself an Nx project whose `lint` target covers the root-level config files, so the hook checks the whole repo. Lint is check-only in the hook; run `pnpm run check` to apply fixes. This acts as a lightweight CI alternative for now; see the decision in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Project Structure
 
@@ -170,7 +162,9 @@ weather-app/
 ├── packages/
 │   ├── ui/          # Shared shadcn/ui components and styles
 │   ├── auth/        # Authentication configuration & logic
-│   └── db/          # Database schema & queries
+│   ├── db/          # Database schema & queries
+│   ├── env/         # Zod-validated environment schemas
+│   └── config/      # Shared TypeScript config
 ```
 
 ## Common Commands
@@ -189,6 +183,7 @@ Tasks are orchestrated by [Nx](https://nx.dev) (with computation caching, so unc
 | Build all apps | `pnpm nx run-many -t build` | `pnpm run build` |
 | Type-check all projects | `pnpm nx run-many -t check-types` | `pnpm run check-types` |
 | Run all tests (Vitest) | `pnpm nx run-many -t test` | `pnpm run test` |
+| Lint all projects (Biome, check-only) | `pnpm nx run-many -t lint` | `pnpm run lint` |
 
 ### Database
 

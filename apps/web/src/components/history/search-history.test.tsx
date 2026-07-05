@@ -78,9 +78,8 @@ describe("SearchHistory", () => {
     renderPanel({ isSignedIn: false });
 
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
-    await userEvent.click(
-      screen.getByRole("button", { name: "Sign in to keep your search history" }),
-    );
+    // Only the "Sign in" copy is the trigger; the rest of the sentence is plain text.
+    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
 
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     expect(screen.getByText("Sign in to keep favourites and search history.")).toBeInTheDocument();

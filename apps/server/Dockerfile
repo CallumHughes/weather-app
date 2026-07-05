@@ -1,4 +1,6 @@
 FROM node:24-slim AS base
+# openssl: required for Prisma's TLS/engine detection (it warns loudly without it)
+RUN apt-get update -y && apt-get install -y --no-install-recommends openssl && rm -rf /var/lib/apt/lists/*
 RUN npm install -g pnpm
 WORKDIR /app
 ENV SKIP_ENV_VALIDATION=1
