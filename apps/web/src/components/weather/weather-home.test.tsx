@@ -1,17 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { toast } from "sonner";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { addFavouriteAction, removeFavouriteAction } from "@/app/actions/favourites";
 
-import {
-  type FavouriteItem,
-  getFavourites,
-  getHistory,
-  getWeather,
-  type HistoryItem,
-} from "@/lib/api";
+import { type FavouriteWithWeather, getHistory, getWeather, type HistoryItem } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
-
 import { londonWeatherFixture } from "./weather.fixtures";
 import { WeatherHome } from "./weather-home";
 
@@ -22,9 +17,6 @@ vi.mock("@/lib/api", async (importOriginal) => {
     getWeather: vi.fn(),
     getHistory: vi.fn(),
     deleteHistoryItem: vi.fn(),
-    getFavourites: vi.fn(),
-    addFavourite: vi.fn(),
-    deleteFavourite: vi.fn(),
   };
 });
 
@@ -32,10 +24,32 @@ vi.mock("@/lib/auth-client", () => ({
   authClient: { useSession: vi.fn() },
 }));
 
+vi.mock("@/app/actions/favourites", () => ({
+  addFavouriteAction: vi.fn(),
+  removeFavouriteAction: vi.fn(),
+  reorderFavouritesAction: vi.fn(),
+}));
+
+vi.mock("sonner", () => ({
+  toast: { error: vi.fn() },
+}));
+
 const getWeatherMock = vi.mocked(getWeather);
 const getHistoryMock = vi.mocked(getHistory);
-const getFavouritesMock = vi.mocked(getFavourites);
+const addFavouriteActionMock = vi.mocked(addFavouriteAction);
+const removeFavouriteActionMock = vi.mocked(removeFavouriteAction);
 const useSessionMock = vi.mocked(authClient.useSession);
+
+const parisFavourite: FavouriteWithWeather = {
+  id: "f-paris",
+  name: "Paris",
+  country: "FR",
+  lat: 48.85,
+  lon: 2.35,
+  sortOrder: 0,
+  createdAt: new Date().toISOString(),
+  current: londonWeatherFixture.current,
+};
 
 const londonHistoryItem: HistoryItem = {
   id: "h1",
@@ -55,13 +69,14 @@ function setSession(signedIn: boolean) {
   } as unknown as ReturnType<typeof authClient.useSession>);
 }
 
-function renderHome() {
+function renderHome({ isSignedIn = true, favourites = [] as FavouriteWithWeather[] } = {}) {
+  setSession(isSignedIn);
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <WeatherHome />
+      <WeatherHome isSignedIn={isSignedIn} favourites={favourites} />
     </QueryClientProvider>,
   );
 }
@@ -69,16 +84,117 @@ function renderHome() {
 beforeEach(() => {
   getWeatherMock.mockReset();
   getHistoryMock.mockReset();
-  getFavouritesMock.mockReset();
+  addFavouriteActionMock.mockReset();
+  removeFavouriteActionMock.mockReset();
   useSessionMock.mockReset();
-  // The favourites panel and star toggle fetch this when signed in; the
-  // history-focused tests only need it to resolve.
-  getFavouritesMock.mockResolvedValue([]);
+  getHistoryMock.mockResolvedValue([]);
 });
 
 describe("WeatherHome", () => {
-  it("clicking a history row triggers a weather search for that location", async () => {
-    setSession(true);
+  it("submitting a search opens the result dialog with the weather card", async () => {
+    getWeatherMock.mockResolvedValue(londonWeatherFixture);
+    renderHome();
+
+    await userEvent.type(screen.getByLabelText("City"), "London");
+    await userEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    const dialog = await screen.findByTestId("search-result-dialog");
+    expect(dialog).toBeInTheDocument();
+    expect(await screen.findByTestId("weather-card")).toBeInTheDocument();
+    expect(getWeatherMock).toHaveBeenCalledWith("London");
+  });
+
+  it("Add optimistically prepends the favourite and closes the dialog", async () => {
+    getWeatherMock.mockResolvedValue(londonWeatherFixture);
+    // Deferred: the optimistic state stays visible for assertions, but the
+    // promise MUST resolve before the test ends — React 19 entangles async
+    // transitions, so an unresolved action blocks later tests' transitions.
+    let resolveAdd = (_: { ok: true }) => {};
+    addFavouriteActionMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveAdd = resolve;
+        }),
+    );
+    renderHome({ favourites: [parisFavourite] });
+
+    await userEvent.type(screen.getByLabelText("City"), "London");
+    await userEvent.click(screen.getByRole("button", { name: "Search" }));
+    const dialog = await screen.findByTestId("search-result-dialog");
+    await within(dialog).findByTestId("weather-card");
+    await userEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("search-result-dialog")).not.toBeInTheDocument(),
+    );
+    const board = screen.getByTestId("favourites-board");
+    const cards = screen.getAllByTestId("weather-card");
+    expect(board).toContainElement(cards[0] ?? null);
+    expect(cards[0]).toHaveTextContent("London, England, GB");
+    expect(cards[1]).toHaveTextContent("Paris");
+    expect(addFavouriteActionMock).toHaveBeenCalledExactlyOnceWith(londonWeatherFixture.location);
+
+    resolveAdd({ ok: true });
+  });
+
+  it("reverts the optimistic add when the action fails", async () => {
+    getWeatherMock.mockResolvedValue(londonWeatherFixture);
+    addFavouriteActionMock.mockResolvedValue({
+      ok: false,
+      code: "FAVOURITES_LIMIT_REACHED",
+      message: "You can save at most 20 favourites — remove one first.",
+    });
+    renderHome({ favourites: [parisFavourite] });
+
+    await userEvent.type(screen.getByLabelText("City"), "London");
+    await userEvent.click(screen.getByRole("button", { name: "Search" }));
+    const dialog = await screen.findByTestId("search-result-dialog");
+    await within(dialog).findByTestId("weather-card");
+    await userEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    // The action settled with an error: the message is surfaced and the
+    // optimistic card reverts away.
+    await waitFor(() => expect(vi.mocked(toast.error)).toHaveBeenCalled());
+    await waitFor(() => {
+      const cards = screen.getAllByTestId("weather-card");
+      expect(cards).toHaveLength(1);
+      expect(cards[0]).toHaveTextContent("Paris");
+    });
+  });
+
+  it("removing a favourite hides its card immediately", async () => {
+    // Deferred (see the add test): resolved before the test ends.
+    let resolveRemove = (_: { ok: true }) => {};
+    removeFavouriteActionMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveRemove = resolve;
+        }),
+    );
+    renderHome({ favourites: [parisFavourite] });
+
+    await userEvent.click(screen.getByRole("button", { name: "Remove Paris from favourites" }));
+
+    await waitFor(() => expect(screen.queryAllByTestId("weather-card")).toHaveLength(0));
+    expect(screen.getByTestId("favourites-empty")).toBeInTheDocument();
+    expect(removeFavouriteActionMock).toHaveBeenCalledExactlyOnceWith("f-paris");
+
+    resolveRemove({ ok: true });
+  });
+
+  it("signed out: the dialog offers Sign in to save instead of Add", async () => {
+    getWeatherMock.mockResolvedValue(londonWeatherFixture);
+    renderHome({ isSignedIn: false });
+
+    await userEvent.type(screen.getByLabelText("City"), "London");
+    await userEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    await screen.findByTestId("weather-card");
+    expect(screen.getByRole("button", { name: "Sign in to save" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add" })).not.toBeInTheDocument();
+  });
+
+  it("clicking a history row re-runs the search in the dialog", async () => {
     getHistoryMock.mockResolvedValue([londonHistoryItem]);
     getWeatherMock.mockResolvedValue(londonWeatherFixture);
     renderHome();
@@ -86,84 +202,13 @@ describe("WeatherHome", () => {
     await screen.findByTestId("history-list");
     await userEvent.click(screen.getByRole("button", { name: /London, England, GB/ }));
 
-    expect(await screen.findByTestId("weather-card")).toBeInTheDocument();
+    expect(await screen.findByTestId("search-result-dialog")).toBeInTheDocument();
     expect(getWeatherMock).toHaveBeenCalledWith("London");
     // The re-run also fills the search input with the resolved name.
     expect(screen.getByLabelText("City")).toHaveValue("London");
   });
 
-  it("clicking a favourite triggers a weather search for that location", async () => {
-    setSession(true);
-    getHistoryMock.mockResolvedValue([]);
-    const favourite: FavouriteItem = {
-      id: "f1",
-      name: "London",
-      country: "GB",
-      state: "England",
-      lat: 51.5073219,
-      lon: -0.1276474,
-      sortOrder: null,
-      createdAt: new Date().toISOString(),
-    };
-    getFavouritesMock.mockResolvedValue([favourite]);
-    getWeatherMock.mockResolvedValue(londonWeatherFixture);
-    renderHome();
-
-    await screen.findByTestId("favourites-list");
-    await userEvent.click(screen.getByRole("button", { name: "London, England, GB" }));
-
-    expect(await screen.findByTestId("weather-card")).toBeInTheDocument();
-    expect(getWeatherMock).toHaveBeenCalledWith("London");
-    expect(screen.getByLabelText("City")).toHaveValue("London");
-  });
-
-  it("signed out: renders no favourites panel and never fetches favourites", async () => {
-    setSession(false);
-    renderHome();
-
-    expect(screen.queryByTestId("favourites")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("favourite-chips")).not.toBeInTheDocument();
-    expect(getFavouritesMock).not.toHaveBeenCalled();
-  });
-
-  it("renders favourites as chips; tapping one re-runs the search", async () => {
-    setSession(true);
-    getHistoryMock.mockResolvedValue([]);
-    const favourite: FavouriteItem = {
-      id: "f1",
-      name: "London",
-      country: "GB",
-      state: "England",
-      lat: 51.5073219,
-      lon: -0.1276474,
-      sortOrder: null,
-      createdAt: new Date().toISOString(),
-    };
-    getFavouritesMock.mockResolvedValue([favourite]);
-    getWeatherMock.mockResolvedValue(londonWeatherFixture);
-    renderHome();
-
-    const chips = await screen.findByTestId("favourite-chips");
-    await userEvent.click(within(chips).getByRole("button", { name: "London" }));
-
-    expect(await screen.findByTestId("weather-card")).toBeInTheDocument();
-    expect(getWeatherMock).toHaveBeenCalledWith("London");
-    expect(screen.getByLabelText("City")).toHaveValue("London");
-  });
-
-  it("renders no chip row when there are no favourites", async () => {
-    setSession(true);
-    getHistoryMock.mockResolvedValue([]);
-    getFavouritesMock.mockResolvedValue([]);
-    renderHome();
-
-    await screen.findByTestId("favourites-empty");
-    expect(screen.queryByTestId("favourite-chips")).not.toBeInTheDocument();
-  });
-
   it("invalidates the history query after a successful signed-in search", async () => {
-    setSession(true);
-    getHistoryMock.mockResolvedValue([]);
     getWeatherMock.mockResolvedValue(londonWeatherFixture);
     renderHome();
 
@@ -176,19 +221,5 @@ describe("WeatherHome", () => {
 
     // Weather success while signed in → ["history"] invalidated → refetch.
     await waitFor(() => expect(getHistoryMock).toHaveBeenCalledTimes(2));
-  });
-
-  it("signed out: renders the sign-in hint and searches do not touch history", async () => {
-    setSession(false);
-    getWeatherMock.mockResolvedValue(londonWeatherFixture);
-    renderHome();
-
-    expect(screen.getByTestId("history-signed-out")).toBeInTheDocument();
-
-    await userEvent.type(screen.getByLabelText("City"), "London");
-    await userEvent.click(screen.getByRole("button", { name: "Search" }));
-    await screen.findByTestId("weather-card");
-
-    expect(getHistoryMock).not.toHaveBeenCalled();
   });
 });

@@ -3,7 +3,12 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 
 import { errorEnvelopeSchema } from "@/lib/errors";
 import type { HistoryService } from "@/modules/history/history.service";
-import { weatherQuerySchema, weatherResponseSchema } from "@/modules/weather/weather.schemas";
+import {
+  currentWeatherResponseSchema,
+  weatherByCoordsQuerySchema,
+  weatherQuerySchema,
+  weatherResponseSchema,
+} from "@/modules/weather/weather.schemas";
 import type { WeatherService } from "@/modules/weather/weather.service";
 
 export interface WeatherRoutesOptions {
@@ -90,6 +95,55 @@ export async function weatherRoutes(
       }
 
       return data;
+    },
+  });
+
+  fastify.withTypeProvider<ZodTypeProvider>().route({
+    method: "GET",
+    url: "/weather/current",
+    schema: {
+      tags: ["Weather"],
+      summary: "Get current weather for known coordinates",
+      description:
+        "Returns current conditions for a latitude/longitude pair without geocoding — " +
+        "intended for refreshing places whose coordinates are already known (e.g. saved " +
+        "favourites). Served from the same coordinate-keyed cache as `/weather` (see the " +
+        "`x-cache` header). Never records search history.",
+      operationId: "getCurrentWeatherByCoords",
+      querystring: weatherByCoordsQuerySchema,
+      response: {
+        200: currentWeatherResponseSchema,
+        400: errorEnvelopeSchema,
+        429: errorEnvelopeSchema,
+        500: errorEnvelopeSchema,
+        502: errorEnvelopeSchema,
+        504: errorEnvelopeSchema,
+      },
+      responseDocs: {
+        200: {
+          description: "Current weather at the given coordinates.",
+          headers: {
+            "x-cache": {
+              type: "string",
+              enum: ["HIT", "MISS", "STALE"],
+              description:
+                "Cache outcome: HIT — served from the weather cache; MISS — fetched " +
+                "upstream; STALE — upstream failed, an expired cache entry was served instead.",
+            },
+          },
+        },
+        400: { description: "Invalid request (`VALIDATION_ERROR`): bad `lat`/`lon` values." },
+        429: { description: "Rate limit exceeded (`RATE_LIMITED`) — see `retry-after`." },
+        500: { description: "Unexpected server error (`INTERNAL_ERROR`)." },
+        502: { description: "The upstream weather provider failed (`UPSTREAM_ERROR`)." },
+        504: { description: "The upstream weather provider timed out (`UPSTREAM_TIMEOUT`)." },
+      },
+    },
+    async handler(request, reply) {
+      const { lat, lon } = request.query;
+      const { data, cache } = await weatherService.getCurrentByCoords(lat, lon);
+      reply.header("x-cache", cache);
+      return { current: data };
     },
   });
 }

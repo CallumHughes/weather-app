@@ -4,7 +4,6 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { deleteHistoryItem, getHistory, type HistoryItem } from "@/lib/api";
-import { authClient } from "@/lib/auth-client";
 
 import { SearchHistory } from "./search-history";
 
@@ -13,13 +12,13 @@ vi.mock("@/lib/api", async (importOriginal) => {
   return { ...actual, getHistory: vi.fn(), deleteHistoryItem: vi.fn() };
 });
 
+// The signed-out hint renders AuthDrawer, whose forms import the auth client.
 vi.mock("@/lib/auth-client", () => ({
-  authClient: { useSession: vi.fn() },
+  authClient: { useSession: vi.fn(() => ({ data: null, isPending: false })) },
 }));
 
 const getHistoryMock = vi.mocked(getHistory);
 const deleteHistoryItemMock = vi.mocked(deleteHistoryItem);
-const useSessionMock = vi.mocked(authClient.useSession);
 
 function historyItem(overrides: Partial<HistoryItem> = {}): HistoryItem {
   return {
@@ -35,27 +34,16 @@ function historyItem(overrides: Partial<HistoryItem> = {}): HistoryItem {
   };
 }
 
-function signedIn() {
-  useSessionMock.mockReturnValue({
-    data: { user: { id: "user-1" } },
-    isPending: false,
-  } as unknown as ReturnType<typeof authClient.useSession>);
-}
-
-function signedOut() {
-  useSessionMock.mockReturnValue({
-    data: null,
-    isPending: false,
-  } as unknown as ReturnType<typeof authClient.useSession>);
-}
-
-function renderPanel(onSelect: (location: string) => void = () => {}) {
+function renderPanel(
+  onSelect: (location: string) => void = () => {},
+  { isSignedIn = true }: { isSignedIn?: boolean } = {},
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <SearchHistory onSelect={onSelect} />
+      <SearchHistory isSignedIn={isSignedIn} onSelect={onSelect} />
     </QueryClientProvider>,
   );
 }
@@ -63,13 +51,11 @@ function renderPanel(onSelect: (location: string) => void = () => {}) {
 beforeEach(() => {
   getHistoryMock.mockReset();
   deleteHistoryItemMock.mockReset();
-  useSessionMock.mockReset();
 });
 
 describe("SearchHistory", () => {
   it("signed out: renders the sign-in hint and never fetches history", async () => {
-    signedOut();
-    renderPanel();
+    renderPanel(undefined, { isSignedIn: false });
 
     const hint = screen.getByTestId("history-signed-out");
     expect(hint).toHaveTextContent("Sign in to keep your search history");
@@ -78,8 +64,7 @@ describe("SearchHistory", () => {
   });
 
   it("signed out: the hint opens the auth drawer instead of linking to a login page", async () => {
-    signedOut();
-    renderPanel();
+    renderPanel(undefined, { isSignedIn: false });
 
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
     await userEvent.click(
@@ -91,7 +76,6 @@ describe("SearchHistory", () => {
   });
 
   it("signed in: shows skeletons while loading, then the list", async () => {
-    signedIn();
     let resolve: (items: HistoryItem[]) => void = () => {};
     getHistoryMock.mockImplementation(
       () =>
@@ -115,7 +99,6 @@ describe("SearchHistory", () => {
   });
 
   it("signed in: shows the empty state when there is no history", async () => {
-    signedIn();
     getHistoryMock.mockResolvedValue([]);
     renderPanel();
 
@@ -124,7 +107,6 @@ describe("SearchHistory", () => {
   });
 
   it("signed in: shows the error state with a Retry button that refetches", async () => {
-    signedIn();
     getHistoryMock.mockRejectedValue(new Error("boom"));
     renderPanel();
 
@@ -138,7 +120,6 @@ describe("SearchHistory", () => {
   });
 
   it("deletes an item and refetches the list", async () => {
-    signedIn();
     const london = historyItem();
     const paris = historyItem({ id: "h2", resolvedName: "Paris", country: "FR" });
     getHistoryMock.mockResolvedValueOnce([london, paris]).mockResolvedValueOnce([paris]);
@@ -157,7 +138,6 @@ describe("SearchHistory", () => {
   });
 
   it("clicking a row re-runs that search via onSelect", async () => {
-    signedIn();
     getHistoryMock.mockResolvedValue([historyItem()]);
     const onSelect = vi.fn();
     renderPanel(onSelect);

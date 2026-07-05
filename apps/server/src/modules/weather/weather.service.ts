@@ -15,9 +15,10 @@ import {
 } from "@/modules/weather/weather.constants";
 import {
   type CachedGeocode,
+  type CurrentWeather,
   cachedGeocodeSchema,
+  currentWeatherSchema,
   type WeatherResponse,
-  weatherResponseSchema,
 } from "@/modules/weather/weather.schemas";
 
 /** How the weather cache behaved for a request; surfaced as `x-cache`. */
@@ -28,11 +29,13 @@ export interface WeatherResult {
   cache: CacheOutcome;
 }
 
+export interface CurrentWeatherByCoordsResult {
+  data: CurrentWeather;
+  cache: CacheOutcome;
+}
+
 /** Map upstream shapes to the client-facing DTO (never leak upstream shapes). */
-export function toWeatherResponse(
-  geo: CachedGeocode,
-  weather: CurrentWeatherResult,
-): WeatherResponse {
+export function toCurrentWeather(weather: CurrentWeatherResult): CurrentWeather {
   const condition = weather.weather[0];
   if (!condition) {
     // Guarded upstream by the zod schema (`weather` array min length 1);
@@ -44,26 +47,17 @@ export function toWeatherResponse(
     );
   }
   return {
-    location: {
-      name: geo.name,
-      country: geo.country,
-      ...(geo.state !== undefined && { state: geo.state }),
-      lat: geo.lat,
-      lon: geo.lon,
+    temperatureC: weather.main.temp,
+    feelsLikeC: weather.main.feels_like,
+    humidityPct: weather.main.humidity,
+    windSpeedMs: weather.wind.speed,
+    condition: {
+      id: condition.id,
+      main: condition.main,
+      description: condition.description,
+      icon: condition.icon,
     },
-    current: {
-      temperatureC: weather.main.temp,
-      feelsLikeC: weather.main.feels_like,
-      humidityPct: weather.main.humidity,
-      windSpeedMs: weather.wind.speed,
-      condition: {
-        id: condition.id,
-        main: condition.main,
-        description: condition.description,
-        icon: condition.icon,
-      },
-      observedAt: new Date(weather.dt * 1000).toISOString(),
-    },
+    observedAt: new Date(weather.dt * 1000).toISOString(),
   };
 }
 
@@ -99,20 +93,37 @@ export class WeatherService {
 
   async getCurrentWeather(location: string): Promise<WeatherResult> {
     const geo = await this.resolveLocation(location);
+    const { data: current, cache } = await this.getCurrentByCoords(geo.lat, geo.lon);
+    return {
+      data: {
+        location: {
+          name: geo.name,
+          country: geo.country,
+          ...(geo.state !== undefined && { state: geo.state }),
+          lat: geo.lat,
+          lon: geo.lon,
+        },
+        current,
+      },
+      cache,
+    };
+  }
 
-    const key = weatherCacheKey(geo.lat, geo.lon);
-    const cached = await readValidated(() => this.cache.get(key), weatherResponseSchema);
+  /** Current conditions for known coordinates — no geocoding, no location in the DTO. */
+  async getCurrentByCoords(lat: number, lon: number): Promise<CurrentWeatherByCoordsResult> {
+    const key = weatherCacheKey(lat, lon);
+    const cached = await readValidated(() => this.cache.get(key), currentWeatherSchema);
     if (cached) {
       return { data: cached, cache: "HIT" };
     }
 
     let weather: CurrentWeatherResult;
     try {
-      weather = await this.client.getCurrentWeather(geo.lat, geo.lon);
+      weather = await this.client.getCurrentWeather(lat, lon);
     } catch (error) {
       // Stale-on-upstream-failure: serve an expired entry over a 502/504.
       if (isUpstreamFailure(error)) {
-        const stale = await readValidated(() => this.cache.getStale(key), weatherResponseSchema);
+        const stale = await readValidated(() => this.cache.getStale(key), currentWeatherSchema);
         if (stale) {
           return { data: stale, cache: "STALE" };
         }
@@ -120,7 +131,7 @@ export class WeatherService {
       throw error;
     }
 
-    const data = toWeatherResponse(geo, weather);
+    const data = toCurrentWeather(weather);
     await this.cache.set(key, data, WEATHER_TTL_SECONDS);
     return { data, cache: "MISS" };
   }

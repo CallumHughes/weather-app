@@ -39,7 +39,9 @@ export async function historyRoutes(
       summary: "List recent searches",
       description:
         "Returns the signed-in user's most recent weather searches (newest first, at most " +
-        "10). Requires a Better-Auth session cookie — see the Authentication page.",
+        "5). Repeat searches of the same location are kept in storage as an audit trail " +
+        "but collapsed here to their most recent occurrence, so each location appears at " +
+        "most once. Requires a Better-Auth session cookie — see the Authentication page.",
       operationId: "listSearchHistory",
       response: {
         200: historyListResponseSchema,

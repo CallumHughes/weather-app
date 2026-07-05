@@ -118,8 +118,8 @@ describe("/api/v1/history", () => {
   });
 
   describe("GET /api/v1/history", () => {
-    it("returns only the session user's rows, newest first, capped at 10", async () => {
-      for (let i = 0; i < 12; i++) {
+    it("returns only the session user's rows, newest first, capped at 5", async () => {
+      for (let i = 0; i < 7; i++) {
         repo.seed(USER, search({ resolvedName: `City ${i}`, lat: i, lon: i }), new Date(1000 * i));
       }
       repo.seed(OTHER_USER, search({ resolvedName: "Elsewhere" }), new Date());
@@ -131,14 +131,14 @@ describe("/api/v1/history", () => {
 
       expect(response.statusCode).toBe(200);
       const items = response.json();
-      expect(items).toHaveLength(10);
+      expect(items).toHaveLength(5);
       expect(items[0]).toMatchObject({
-        resolvedName: "City 11",
+        resolvedName: "City 6",
         country: "GB",
         state: "England",
         query: "London",
       });
-      expect(items[0].createdAt).toBe(new Date(11_000).toISOString());
+      expect(items[0].createdAt).toBe(new Date(6000).toISOString());
       expect(items.map((item: { resolvedName: string }) => item.resolvedName)).not.toContain(
         "Elsewhere",
       );

@@ -4,9 +4,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Avatar, AvatarFallback } from "@weather-app/ui/components/avatar";
 import { Button } from "@weather-app/ui/components/button";
 import { User } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 import { AuthDrawer } from "@/components/auth/auth-drawer";
-import { FAVOURITES_QUERY_KEY } from "@/hooks/use-favourites";
 import { HISTORY_QUERY_KEY } from "@/hooks/use-history";
 import { authClient } from "@/lib/auth-client";
 
@@ -33,6 +33,7 @@ const chipClassName = "flex items-center gap-2 rounded-full bg-muted p-1";
 export function AccountChip() {
   const { data: session, isPending } = authClient.useSession();
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   if (isPending) {
     return null;
@@ -64,11 +65,13 @@ export function AccountChip() {
     authClient.signOut({
       fetchOptions: {
         onSuccess: () => {
-          // Drop the signed-out user's cached favourites/history so they can
-          // never leak into the next session on this page (auth happens
-          // in-place now — no navigation resets the cache).
-          queryClient.removeQueries({ queryKey: FAVOURITES_QUERY_KEY });
+          // Drop the signed-out user's cached history so it can never leak
+          // into the next session on this page (auth happens in-place now —
+          // no navigation resets the cache).
           queryClient.removeQueries({ queryKey: HISTORY_QUERY_KEY });
+          // Favourites are server-rendered: refresh the RSC tree so the
+          // board empties out.
+          router.refresh();
         },
       },
     });

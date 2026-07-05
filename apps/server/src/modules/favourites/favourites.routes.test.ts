@@ -175,11 +175,49 @@ describe("/api/v1/favourites", () => {
         state: "England",
         lat: 51.5073219,
         lon: -0.1276474,
-        sortOrder: null,
+        sortOrder: -1,
         createdAt: expect.any(String),
       });
       expect(repo.rows).toHaveLength(1);
       expect(repo.rows[0]?.userId).toBe(USER);
+    });
+
+    it("places each new favourite at the top of the list", async () => {
+      const testApp = await buildTestApp();
+      for (const [name, lat] of [
+        ["First", 1],
+        ["Second", 2],
+        ["Third", 3],
+      ] as const) {
+        const response = await testApp.inject({
+          method: "POST",
+          url: "/api/v1/favourites",
+          payload: favourite({ name, lat, lon: lat }),
+        });
+        expect(response.statusCode).toBe(201);
+      }
+
+      const list = await testApp.inject({ method: "GET", url: "/api/v1/favourites" });
+      expect(list.json().map((item: { name: string }) => item.name)).toEqual([
+        "Third",
+        "Second",
+        "First",
+      ]);
+    });
+
+    it("places a new favourite above legacy rows that were never ordered", async () => {
+      repo.seed(USER, favourite({ name: "Legacy", lat: 1, lon: 1 }), new Date(1000));
+
+      const testApp = await buildTestApp();
+      const response = await testApp.inject({
+        method: "POST",
+        url: "/api/v1/favourites",
+        payload: favourite({ name: "Fresh", lat: 2, lon: 2 }),
+      });
+      expect(response.statusCode).toBe(201);
+
+      const list = await testApp.inject({ method: "GET", url: "/api/v1/favourites" });
+      expect(list.json().map((item: { name: string }) => item.name)).toEqual(["Fresh", "Legacy"]);
     });
 
     it("accepts a favourite without a state", async () => {
@@ -246,6 +284,113 @@ describe("/api/v1/favourites", () => {
       expect(response.statusCode).toBe(400);
       expectErrorEnvelope(response.json(), "VALIDATION_ERROR");
       expect(repo.rows).toHaveLength(0);
+    });
+  });
+
+  describe("PUT /api/v1/favourites/order", () => {
+    function seedThree() {
+      const a = repo.seed(USER, favourite({ name: "A", lat: 1, lon: 1 }), new Date(1000));
+      const b = repo.seed(USER, favourite({ name: "B", lat: 2, lon: 2 }), new Date(2000));
+      const c = repo.seed(USER, favourite({ name: "C", lat: 3, lon: 3 }), new Date(3000));
+      return { a, b, c };
+    }
+
+    it("returns 401 without a session", async () => {
+      const response = await (await buildTestApp({ getSession: stubSession(null) })).inject({
+        method: "PUT",
+        url: "/api/v1/favourites/order",
+        payload: { ids: ["x"] },
+      });
+
+      expect(response.statusCode).toBe(401);
+      expectErrorEnvelope(response.json(), "UNAUTHENTICATED");
+    });
+
+    it("persists the order and returns the reordered list", async () => {
+      const { a, b, c } = seedThree();
+      const testApp = await buildTestApp();
+
+      const response = await testApp.inject({
+        method: "PUT",
+        url: "/api/v1/favourites/order",
+        payload: { ids: [c.id, a.id, b.id] },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().map((item: { name: string }) => item.name)).toEqual(["C", "A", "B"]);
+      expect(response.json().map((item: { sortOrder: number | null }) => item.sortOrder)).toEqual([
+        0, 1, 2,
+      ]);
+
+      // The order survives a fresh list.
+      const list = await testApp.inject({ method: "GET", url: "/api/v1/favourites" });
+      expect(list.json().map((item: { name: string }) => item.name)).toEqual(["C", "A", "B"]);
+    });
+
+    it("returns 400 VALIDATION_ERROR for duplicate ids", async () => {
+      const { a, b } = seedThree();
+
+      const response = await (await buildTestApp()).inject({
+        method: "PUT",
+        url: "/api/v1/favourites/order",
+        payload: { ids: [a.id, a.id, b.id] },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expectErrorEnvelope(response.json(), "VALIDATION_ERROR");
+    });
+
+    it("returns 400 VALIDATION_ERROR for an empty id list", async () => {
+      const response = await (await buildTestApp()).inject({
+        method: "PUT",
+        url: "/api/v1/favourites/order",
+        payload: { ids: [] },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expectErrorEnvelope(response.json(), "VALIDATION_ERROR");
+    });
+
+    it("returns 409 FAVOURITES_OUT_OF_SYNC when ids are a subset of the favourites", async () => {
+      const { a, c } = seedThree();
+
+      const response = await (await buildTestApp()).inject({
+        method: "PUT",
+        url: "/api/v1/favourites/order",
+        payload: { ids: [c.id, a.id] },
+      });
+
+      expect(response.statusCode).toBe(409);
+      expectErrorEnvelope(response.json(), "FAVOURITES_OUT_OF_SYNC");
+    });
+
+    it("returns 409 FAVOURITES_OUT_OF_SYNC when ids include an unknown id", async () => {
+      const { a, b, c } = seedThree();
+
+      const response = await (await buildTestApp()).inject({
+        method: "PUT",
+        url: "/api/v1/favourites/order",
+        payload: { ids: [c.id, a.id, b.id, "not-yours"] },
+      });
+
+      expect(response.statusCode).toBe(409);
+      expectErrorEnvelope(response.json(), "FAVOURITES_OUT_OF_SYNC");
+    });
+
+    it("returns 409 FAVOURITES_OUT_OF_SYNC for another user's ids (ownership never revealed)", async () => {
+      const { a, b } = seedThree();
+      const foreign = repo.seed(OTHER_USER, favourite({ lat: 9, lon: 9 }), new Date());
+
+      const response = await (await buildTestApp()).inject({
+        method: "PUT",
+        url: "/api/v1/favourites/order",
+        payload: { ids: [a.id, b.id, foreign.id] },
+      });
+
+      expect(response.statusCode).toBe(409);
+      expectErrorEnvelope(response.json(), "FAVOURITES_OUT_OF_SYNC");
+      // The foreign row was never touched.
+      expect(foreign.sortOrder).toBeNull();
     });
   });
 

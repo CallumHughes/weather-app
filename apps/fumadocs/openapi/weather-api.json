@@ -15,7 +15,7 @@
             "properties": {
               "code": {
                 "type": "string",
-                "description": "Machine-readable error code (VALIDATION_ERROR, UNAUTHENTICATED, NOT_FOUND, LOCATION_NOT_FOUND, ALREADY_FAVOURITE, FAVOURITES_LIMIT_REACHED, UPSTREAM_ERROR, UPSTREAM_TIMEOUT, RATE_LIMITED, INTERNAL_ERROR)"
+                "description": "Machine-readable error code (VALIDATION_ERROR, UNAUTHENTICATED, NOT_FOUND, LOCATION_NOT_FOUND, ALREADY_FAVOURITE, FAVOURITES_LIMIT_REACHED, FAVOURITES_OUT_OF_SYNC, UPSTREAM_ERROR, UPSTREAM_TIMEOUT, RATE_LIMITED, INTERNAL_ERROR)"
               },
               "message": {
                 "type": "string",
@@ -248,6 +248,185 @@
         }
       }
     },
+    "/api/v1/weather/current": {
+      "get": {
+        "operationId": "getCurrentWeatherByCoords",
+        "summary": "Get current weather for known coordinates",
+        "tags": [
+          "Weather"
+        ],
+        "description": "Returns current conditions for a latitude/longitude pair without geocoding — intended for refreshing places whose coordinates are already known (e.g. saved favourites). Served from the same coordinate-keyed cache as `/weather` (see the `x-cache` header). Never records search history.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "number",
+              "minimum": -90,
+              "maximum": 90
+            },
+            "in": "query",
+            "name": "lat",
+            "required": true,
+            "description": "Latitude in decimal degrees"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": -180,
+              "maximum": 180
+            },
+            "in": "query",
+            "name": "lon",
+            "required": true,
+            "description": "Longitude in decimal degrees"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current weather at the given coordinates.",
+            "headers": {
+              "x-cache": {
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "HIT",
+                    "MISS",
+                    "STALE"
+                  ]
+                },
+                "description": "Cache outcome: HIT — served from the weather cache; MISS — fetched upstream; STALE — upstream failed, an expired cache entry was served instead."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "current": {
+                      "type": "object",
+                      "properties": {
+                        "temperatureC": {
+                          "type": "number",
+                          "description": "Air temperature in °C"
+                        },
+                        "feelsLikeC": {
+                          "type": "number",
+                          "description": "Perceived temperature in °C"
+                        },
+                        "humidityPct": {
+                          "type": "number",
+                          "description": "Relative humidity in %"
+                        },
+                        "windSpeedMs": {
+                          "type": "number",
+                          "description": "Wind speed in m/s"
+                        },
+                        "condition": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "number",
+                              "description": "Weather condition id (provider taxonomy)"
+                            },
+                            "main": {
+                              "type": "string",
+                              "description": "Condition group, e.g. \"Clouds\""
+                            },
+                            "description": {
+                              "type": "string",
+                              "description": "Human-readable condition, e.g. \"scattered clouds\""
+                            },
+                            "icon": {
+                              "type": "string",
+                              "description": "Icon code for the condition"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "main",
+                            "description",
+                            "icon"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "observedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                          "description": "When the reading was observed (ISO 8601, UTC)"
+                        }
+                      },
+                      "required": [
+                        "temperatureC",
+                        "feelsLikeC",
+                        "humidityPct",
+                        "windSpeedMs",
+                        "condition",
+                        "observedAt"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "current"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (`VALIDATION_ERROR`): bad `lat`/`lon` values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (`RATE_LIMITED`) — see `retry-after`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error (`INTERNAL_ERROR`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The upstream weather provider failed (`UPSTREAM_ERROR`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The upstream weather provider timed out (`UPSTREAM_TIMEOUT`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/history": {
       "get": {
         "operationId": "listSearchHistory",
@@ -255,7 +434,7 @@
         "tags": [
           "History"
         ],
-        "description": "Returns the signed-in user's most recent weather searches (newest first, at most 10). Requires a Better-Auth session cookie — see the Authentication page.",
+        "description": "Returns the signed-in user's most recent weather searches (newest first, at most 5). Repeat searches of the same location are kept in storage as an audit trail but collapsed here to their most recent occurrence, so each location appears at most once. Requires a Better-Auth session cookie — see the Authentication page.",
         "responses": {
           "200": {
             "description": "The user's recent searches, newest first.",
@@ -431,7 +610,7 @@
         "tags": [
           "Favourites"
         ],
-        "description": "Returns the signed-in user's favourite locations. Manually ordered favourites come first (`sortOrder` ascending — manual reordering is not exposed yet, so `sortOrder` is null for every row today), the rest follow oldest-first. Requires a Better-Auth session cookie — see the Authentication page.",
+        "description": "Returns the signed-in user's favourite locations in display order: `sortOrder` ascending (new favourites are created at the top; PUT /api/v1/favourites/order rewrites positions), with any legacy null-`sortOrder` rows last, oldest-first. Requires a Better-Auth session cookie — see the Authentication page.",
         "responses": {
           "200": {
             "description": "The user's favourite locations, ordered as described above.",
@@ -475,7 +654,7 @@
                             "type": "null"
                           }
                         ],
-                        "description": "Manual sort position. Null until the user reorders (not supported yet): ordered favourites list first, unordered ones follow oldest-first."
+                        "description": "Sort position: new favourites are created above existing ones and PUT /api/v1/favourites/order rewrites positions. Ordered favourites list first; legacy null rows follow oldest-first."
                       },
                       "createdAt": {
                         "type": "string",
@@ -537,7 +716,7 @@
         "tags": [
           "Favourites"
         ],
-        "description": "Saves a resolved location (the `location` object from GET /api/v1/weather) as a favourite. Coordinates are the identity: saving the same `lat`/`lon` twice responds 409, and each user can hold at most 20 favourites. Requires a Better-Auth session cookie — see the Authentication page.",
+        "description": "Saves a resolved location (the `location` object from GET /api/v1/weather) as a favourite, placed at the top of the list. Coordinates are the identity: saving the same `lat`/`lon` twice responds 409, and each user can hold at most 20 favourites. Requires a Better-Auth session cookie — see the Authentication page.",
         "requestBody": {
           "required": true,
           "content": {
@@ -615,7 +794,7 @@
                           "type": "null"
                         }
                       ],
-                      "description": "Manual sort position. Null until the user reorders (not supported yet): ordered favourites list first, unordered ones follow oldest-first."
+                      "description": "Sort position: new favourites are created above existing ones and PUT /api/v1/favourites/order rewrites positions. Ordered favourites list first; legacy null rows follow oldest-first."
                     },
                     "createdAt": {
                       "type": "string",
@@ -660,6 +839,159 @@
           },
           "409": {
             "description": "This location is already a favourite (`ALREADY_FAVOURITE`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded (`RATE_LIMITED`) — see `retry-after`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected server error (`INTERNAL_ERROR`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/favourites/order": {
+      "put": {
+        "operationId": "reorderFavourites",
+        "summary": "Reorder favourite locations",
+        "tags": [
+          "Favourites"
+        ],
+        "description": "Persists a manual display order. The body must contain every one of the signed-in user's favourite ids exactly once, top first; each favourite's `sortOrder` becomes its position in the list. If the id set does not match the user's current favourites (for example the list changed in another tab) the request is rejected with 409 `FAVOURITES_OUT_OF_SYNC` — re-fetch and retry. Responds with the freshly ordered list. Requires a Better-Auth session cookie — see the Authentication page.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ids": {
+                    "minItems": 1,
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "description": "Every favourite id the user currently has, in the desired display order (top first)."
+                  }
+                },
+                "required": [
+                  "ids"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The order was saved; the full reordered list is returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "description": "Favourite id — pass to DELETE /api/v1/favourites/{id}"
+                      },
+                      "name": {
+                        "type": "string",
+                        "description": "Place name the query resolved to"
+                      },
+                      "country": {
+                        "type": "string",
+                        "description": "ISO 3166 country code, e.g. GB"
+                      },
+                      "state": {
+                        "description": "State/region, when the geocoder provides one",
+                        "type": "string"
+                      },
+                      "lat": {
+                        "type": "number"
+                      },
+                      "lon": {
+                        "type": "number"
+                      },
+                      "sortOrder": {
+                        "anyOf": [
+                          {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ],
+                        "description": "Sort position: new favourites are created above existing ones and PUT /api/v1/favourites/order rewrites positions. Ordered favourites list first; legacy null rows follow oldest-first."
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$",
+                        "description": "When the favourite was saved (ISO 8601, UTC)"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "country",
+                      "lat",
+                      "lon",
+                      "sortOrder",
+                      "createdAt"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid body (`VALIDATION_ERROR`): empty, more than 20 entries, or duplicate ids.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid session (`UNAUTHENTICATED`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The id set does not match the user's current favourites (`FAVOURITES_OUT_OF_SYNC`) — re-fetch the list and retry.",
             "content": {
               "application/json": {
                 "schema": {

@@ -8,7 +8,6 @@ import { History, Trash2 } from "lucide-react";
 import { AuthDrawer } from "@/components/auth/auth-drawer";
 import { useDeleteHistoryItem, useHistory } from "@/hooks/use-history";
 import type { HistoryItem } from "@/lib/api";
-import { authClient } from "@/lib/auth-client";
 import { formatRelativeTime } from "@/lib/format";
 
 function locationLabel(item: HistoryItem): string {
@@ -16,19 +15,18 @@ function locationLabel(item: HistoryItem): string {
 }
 
 export interface SearchHistoryProps {
+  /**
+   * Server-derived session state (see page.tsx). Passed down rather than read
+   * from authClient.useSession() so SSR and hydration agree deterministically.
+   */
+  isSignedIn: boolean;
   /** Re-run a past search (sets the lifted search state). */
   onSelect: (location: string) => void;
 }
 
-export function SearchHistory({ onSelect }: SearchHistoryProps) {
-  const { data: session, isPending: isSessionPending } = authClient.useSession();
-  const isSignedIn = Boolean(session);
+export function SearchHistory({ isSignedIn, onSelect }: SearchHistoryProps) {
   const history = useHistory(isSignedIn);
   const deleteItem = useDeleteHistoryItem();
-
-  if (isSessionPending) {
-    return null;
-  }
 
   if (!isSignedIn) {
     // Signed out: a single subtle line, no panel (and no history fetch).

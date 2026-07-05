@@ -17,9 +17,10 @@ model FavouriteLocation {
   state     String?
   lat       Float
   lon       Float
-  // Manual ordering seam: null until the user reorders (a future task —
-  // this app never writes it). Lists order by sortOrder ASC NULLS LAST,
-  // then createdAt ASC, so unordered rows append in creation order.
+  // Display position: creates assign min-1 (new favourites list first) and
+  // PUT /favourites/order rewrites positions to 0..n-1. Lists order by
+  // sortOrder ASC NULLS LAST, then createdAt ASC, so legacy null rows
+  // (saved before ordering existed) append in creation order.
   sortOrder Int?
   createdAt DateTime @default(now())
 

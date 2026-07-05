@@ -20,6 +20,7 @@ import {
   DrawerTrigger,
 } from "@weather-app/ui/components/drawer";
 import { useIsMobile } from "@weather-app/ui/hooks/use-mobile";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import SignInForm from "@/components/sign-in-form";
@@ -55,6 +56,7 @@ export function AuthDrawer({ trigger }: AuthDrawerProps) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<AuthMode>("sign-in");
   const isMobile = useIsMobile();
+  const router = useRouter();
 
   function handleOpenChange(next: boolean) {
     setOpen(next);
@@ -64,10 +66,19 @@ export function AuthDrawer({ trigger }: AuthDrawerProps) {
     }
   }
 
-  const close = () => handleOpenChange(false);
+  const handleSuccess = () => {
+    handleOpenChange(false);
+    // Favourites are server-rendered: refresh the RSC tree so the new
+    // session's data appears without a navigation.
+    router.refresh();
+  };
   const copy = COPY[mode];
   const form =
-    mode === "sign-in" ? <SignInForm onSuccess={close} /> : <SignUpForm onSuccess={close} />;
+    mode === "sign-in" ? (
+      <SignInForm onSuccess={handleSuccess} />
+    ) : (
+      <SignUpForm onSuccess={handleSuccess} />
+    );
   const switchButton = (
     <Button
       type="button"

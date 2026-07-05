@@ -52,4 +52,15 @@ describe("WeatherCard", () => {
 
     expect(screen.queryByText(/· cached/)).not.toBeInTheDocument();
   });
+
+  it("renders the provided action in the card's action slot", () => {
+    render(
+      <WeatherCard
+        weather={londonWeatherFixture}
+        action={<button type="button">Do something</button>}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Do something" })).toBeInTheDocument();
+  });
 });

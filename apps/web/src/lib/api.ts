@@ -4,6 +4,22 @@
  * Fastify server, so no server URL (and no API key) ever reaches the client.
  */
 
+/** Current conditions — the `current` block of the weather DTO. */
+export interface CurrentWeather {
+  temperatureC: number;
+  feelsLikeC: number;
+  humidityPct: number;
+  windSpeedMs: number;
+  condition: {
+    id: number;
+    main: string;
+    description: string;
+    icon: string;
+  };
+  /** ISO 8601 timestamp of the upstream observation. */
+  observedAt: string;
+}
+
 export interface WeatherResponse {
   location: {
     name: string;
@@ -12,20 +28,7 @@ export interface WeatherResponse {
     lat: number;
     lon: number;
   };
-  current: {
-    temperatureC: number;
-    feelsLikeC: number;
-    humidityPct: number;
-    windSpeedMs: number;
-    condition: {
-      id: number;
-      main: string;
-      description: string;
-      icon: string;
-    };
-    /** ISO 8601 timestamp of the upstream observation. */
-    observedAt: string;
-  };
+  current: CurrentWeather;
 }
 
 /** A search-history entry as returned by GET /api/v1/history. */
@@ -59,11 +62,20 @@ export interface FavouriteItem {
   state?: string;
   lat: number;
   lon: number;
-  /** Manual sort position; null until reordering exists. */
+  /**
+   * Display position (new favourites are created at the top; reorders rewrite
+   * positions). Null only for rows saved before ordering existed.
+   */
   sortOrder: number | null;
   /** ISO 8601 timestamp of when the favourite was saved. */
   createdAt: string;
 }
+
+/** A favourite plus its server-fetched conditions (null when the fetch failed). */
+export type FavouriteWithWeather = FavouriteItem & {
+  current: CurrentWeather | null;
+  cache?: WeatherCacheStatus;
+};
 
 /** Error codes the API can return in its `{ error: { code, message } }` envelope. */
 export type ApiErrorCode =
@@ -73,6 +85,7 @@ export type ApiErrorCode =
   | "LOCATION_NOT_FOUND"
   | "ALREADY_FAVOURITE"
   | "FAVOURITES_LIMIT_REACHED"
+  | "FAVOURITES_OUT_OF_SYNC"
   | "UPSTREAM_ERROR"
   | "UPSTREAM_TIMEOUT"
   | "INTERNAL_ERROR"
@@ -90,7 +103,7 @@ export class ApiError extends Error {
   }
 }
 
-async function parseErrorEnvelope(response: Response): Promise<ApiError> {
+export async function parseErrorEnvelope(response: Response): Promise<ApiError> {
   let code: ApiErrorCode = "INTERNAL_ERROR";
   let message = "Something went wrong.";
   try {
@@ -136,7 +149,7 @@ export async function getWeather(location: string): Promise<WeatherResult> {
 }
 
 /**
- * The user's recent searches (newest first, at most 10). Requires a
+ * The user's recent searches (newest first, at most 5). Requires a
  * session — the history panel is only rendered when signed in, so a 401
  * here is an edge case surfaced as a plain error state (no toast/redirect).
  */
@@ -150,39 +163,6 @@ export async function getHistory(): Promise<HistoryItem[]> {
 
 export async function deleteHistoryItem(id: string): Promise<void> {
   const response = await fetch(`/api/v1/history/${encodeURIComponent(id)}`, {
-    method: "DELETE",
-  });
-  if (!response.ok) {
-    throw await parseErrorEnvelope(response);
-  }
-}
-
-/**
- * The user's favourite locations (manually ordered first, then oldest-first).
- * Requires a session — the favourites UI only renders when signed in.
- */
-export async function getFavourites(): Promise<FavouriteItem[]> {
-  const response = await fetch("/api/v1/favourites");
-  if (!response.ok) {
-    throw await parseErrorEnvelope(response);
-  }
-  return (await response.json()) as FavouriteItem[];
-}
-
-export async function addFavourite(location: FavouriteLocationInput): Promise<FavouriteItem> {
-  const response = await fetch("/api/v1/favourites", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(location),
-  });
-  if (!response.ok) {
-    throw await parseErrorEnvelope(response);
-  }
-  return (await response.json()) as FavouriteItem;
-}
-
-export async function deleteFavourite(id: string): Promise<void> {
-  const response = await fetch(`/api/v1/favourites/${encodeURIComponent(id)}`, {
     method: "DELETE",
   });
   if (!response.ok) {

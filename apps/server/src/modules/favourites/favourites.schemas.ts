@@ -21,8 +21,9 @@ export const favouriteItemSchema = z.object({
     .int()
     .nullable()
     .describe(
-      "Manual sort position. Null until the user reorders (not supported yet): " +
-        "ordered favourites list first, unordered ones follow oldest-first.",
+      "Sort position: new favourites are created above existing ones and " +
+        "PUT /api/v1/favourites/order rewrites positions. Ordered favourites list " +
+        "first; legacy null rows follow oldest-first.",
     ),
   createdAt: z.iso.datetime().describe("When the favourite was saved (ISO 8601, UTC)"),
 });
@@ -35,3 +36,20 @@ export const favouritesListResponseSchema = z.array(favouriteItemSchema);
 export const favouriteDeleteParamsSchema = z.object({
   id: z.string().min(1).describe("Favourite id (from GET /api/v1/favourites)"),
 });
+
+/**
+ * Body for PUT /api/v1/favourites/order — the complete ordered id list, top
+ * first. The max mirrors the per-user favourites cap.
+ */
+export const favouritesReorderSchema = z.object({
+  ids: z
+    .array(z.string().min(1))
+    .min(1, "ids must not be empty")
+    .max(20, "ids must have at most 20 entries")
+    .refine((ids) => new Set(ids).size === ids.length, "ids must be unique")
+    .describe(
+      "Every favourite id the user currently has, in the desired display order (top first).",
+    ),
+});
+
+export type FavouritesReorder = z.infer<typeof favouritesReorderSchema>;

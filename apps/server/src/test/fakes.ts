@@ -151,9 +151,10 @@ export class InMemoryFavouritesRepo implements FavouritesRepo {
   private nextId = 1;
 
   /**
-   * Seed a row directly (bypasses the cap/duplicate checks — that logic
-   * lives in the service). `sortOrder` is settable here — production code
-   * never writes it — so ordering tests can simulate a future manual reorder.
+   * Seed a row directly (bypasses the cap/duplicate checks and the
+   * create-at-top sortOrder assignment — that logic lives in the service and
+   * `create`), so ordering tests can build arbitrary states, legacy null
+   * sortOrder rows included.
    */
   seed(
     userId: string,
@@ -205,7 +206,13 @@ export class InMemoryFavouritesRepo implements FavouritesRepo {
     if (duplicate) {
       return null;
     }
-    return this.seed(userId, favourite, new Date());
+    // Mirrors PrismaFavouritesRepo: new favourites go one below the current
+    // minimum sortOrder so they list first.
+    const sortOrders = this.rows
+      .filter((row) => row.userId === userId && row.sortOrder !== null)
+      .map((row) => row.sortOrder as number);
+    const min = sortOrders.length > 0 ? Math.min(...sortOrders) : 0;
+    return this.seed(userId, favourite, new Date(), min - 1);
   }
 
   async deleteOwned(userId: string, id: string): Promise<boolean> {
@@ -215,6 +222,15 @@ export class InMemoryFavouritesRepo implements FavouritesRepo {
     }
     this.rows.splice(index, 1);
     return true;
+  }
+
+  async setOrder(userId: string, ids: string[]): Promise<void> {
+    ids.forEach((id, index) => {
+      const row = this.rows.find((candidate) => candidate.id === id && candidate.userId === userId);
+      if (row) {
+        row.sortOrder = index;
+      }
+    });
   }
 }
 

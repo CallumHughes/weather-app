@@ -59,4 +59,27 @@ export class FavouritesService {
   async deleteOwned(userId: string, id: string): Promise<boolean> {
     return this.repo.deleteOwned(userId, id);
   }
+
+  /**
+   * Persist a manual order. `ids` must be exactly the user's current
+   * favourites (every id, no extras) — anything else is rejected with 409
+   * FAVOURITES_OUT_OF_SYNC, which covers both foreign ids (without revealing
+   * whether they exist) and lists gone stale after an add/remove elsewhere.
+   * Returns the freshly ordered list so the client can reconcile.
+   */
+  async reorder(userId: string, ids: string[]): Promise<FavouriteItem[]> {
+    const current = await this.repo.listForUser(userId);
+    const currentIds = new Set(current.map((record) => record.id));
+    const inSync = ids.length === currentIds.size && ids.every((id) => currentIds.has(id));
+    if (!inSync) {
+      throw new AppError(
+        409,
+        ErrorCodes.FAVOURITES_OUT_OF_SYNC,
+        "Your favourites changed since this list was loaded — refresh and try again.",
+      );
+    }
+    await this.repo.setOrder(userId, ids);
+    const reordered = await this.repo.listForUser(userId);
+    return reordered.map(toFavouriteItem);
+  }
 }

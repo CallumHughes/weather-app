@@ -8,6 +8,7 @@ import {
   favouriteDeleteParamsSchema,
   favouriteItemSchema,
   favouritesListResponseSchema,
+  favouritesReorderSchema,
 } from "@/modules/favourites/favourites.schemas";
 import type { FavouritesService } from "@/modules/favourites/favourites.service";
 
@@ -40,9 +41,9 @@ export async function favouritesRoutes(
       tags: ["Favourites"],
       summary: "List favourite locations",
       description:
-        "Returns the signed-in user's favourite locations. Manually ordered favourites " +
-        "come first (`sortOrder` ascending — manual reordering is not exposed yet, so " +
-        "`sortOrder` is null for every row today), the rest follow oldest-first. " +
+        "Returns the signed-in user's favourite locations in display order: `sortOrder` " +
+        "ascending (new favourites are created at the top; PUT /api/v1/favourites/order " +
+        "rewrites positions), with any legacy null-`sortOrder` rows last, oldest-first. " +
         "Requires a Better-Auth session cookie — see the Authentication page.",
       operationId: "listFavourites",
       response: {
@@ -71,9 +72,9 @@ export async function favouritesRoutes(
       summary: "Save a favourite location",
       description:
         "Saves a resolved location (the `location` object from GET /api/v1/weather) as a " +
-        "favourite. Coordinates are the identity: saving the same `lat`/`lon` twice " +
-        "responds 409, and each user can hold at most 20 favourites. Requires a " +
-        "Better-Auth session cookie — see the Authentication page.",
+        "favourite, placed at the top of the list. Coordinates are the identity: saving " +
+        "the same `lat`/`lon` twice responds 409, and each user can hold at most 20 " +
+        "favourites. Requires a Better-Auth session cookie — see the Authentication page.",
       operationId: "addFavourite",
       body: favouriteCreateSchema,
       response: {
@@ -101,6 +102,51 @@ export async function favouritesRoutes(
       const favourite = await favouritesService.add(sessionUserId(request.userId), request.body);
       reply.status(201);
       return favourite;
+    },
+  });
+
+  fastify.withTypeProvider<ZodTypeProvider>().route({
+    method: "PUT",
+    url: "/favourites/order",
+    schema: {
+      tags: ["Favourites"],
+      summary: "Reorder favourite locations",
+      description:
+        "Persists a manual display order. The body must contain every one of the " +
+        "signed-in user's favourite ids exactly once, top first; each favourite's " +
+        "`sortOrder` becomes its position in the list. If the id set does not match the " +
+        "user's current favourites (for example the list changed in another tab) the " +
+        "request is rejected with 409 `FAVOURITES_OUT_OF_SYNC` — re-fetch and retry. " +
+        "Responds with the freshly ordered list. Requires a Better-Auth session cookie — " +
+        "see the Authentication page.",
+      operationId: "reorderFavourites",
+      body: favouritesReorderSchema,
+      response: {
+        200: favouritesListResponseSchema,
+        400: errorEnvelopeSchema,
+        401: errorEnvelopeSchema,
+        409: errorEnvelopeSchema,
+        429: errorEnvelopeSchema,
+        500: errorEnvelopeSchema,
+      },
+      responseDocs: {
+        200: { description: "The order was saved; the full reordered list is returned." },
+        400: {
+          description:
+            "Invalid body (`VALIDATION_ERROR`): empty, more than 20 entries, or duplicate ids.",
+        },
+        401: { description: "No valid session (`UNAUTHENTICATED`)." },
+        409: {
+          description:
+            "The id set does not match the user's current favourites " +
+            "(`FAVOURITES_OUT_OF_SYNC`) — re-fetch the list and retry.",
+        },
+        429: { description: "Rate limit exceeded (`RATE_LIMITED`) — see `retry-after`." },
+        500: { description: "Unexpected server error (`INTERNAL_ERROR`)." },
+      },
+    },
+    async handler(request) {
+      return favouritesService.reorder(sessionUserId(request.userId), request.body.ids);
     },
   });
 

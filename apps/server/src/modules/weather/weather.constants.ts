@@ -18,8 +18,9 @@ export function geocodeCacheKey(query: string): string {
 
 /**
  * Key for current weather at coordinates, rounded to 2 dp (~1 km granularity)
- * so nearby lookups share an entry.
+ * so nearby lookups share an entry. v2: the payload is the `current` block
+ * only (no location), so free-text and by-coords lookups share entries.
  */
 export function weatherCacheKey(lat: number, lon: number): string {
-  return `wx:v1:${lat.toFixed(2)}:${lon.toFixed(2)}`;
+  return `wx:v2:${lat.toFixed(2)}:${lon.toFixed(2)}`;
 }

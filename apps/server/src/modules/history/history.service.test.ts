@@ -85,18 +85,52 @@ describe("HistoryService.record", () => {
 });
 
 describe("HistoryService.listForUser", () => {
-  it("returns at most 10 items, newest first, mapped to the DTO", async () => {
+  it(`returns at most ${HISTORY_LIST_LIMIT} items, newest first, mapped to the DTO`, async () => {
     const { repo, service } = setup();
-    for (let i = 0; i < 12; i++) {
+    const seeded = HISTORY_LIST_LIMIT + 2;
+    for (let i = 0; i < seeded; i++) {
       repo.seed(USER, search({ resolvedName: `City ${i}`, lat: i, lon: i }), new Date(1000 * i));
     }
 
     const items = await service.listForUser(USER);
 
     expect(items).toHaveLength(HISTORY_LIST_LIMIT);
-    expect(items[0]?.resolvedName).toBe("City 11");
-    expect(items[9]?.resolvedName).toBe("City 2");
-    expect(items[0]?.createdAt).toBe(new Date(11_000).toISOString());
+    expect(items[0]?.resolvedName).toBe(`City ${seeded - 1}`);
+    expect(items.at(-1)?.resolvedName).toBe(`City ${seeded - HISTORY_LIST_LIMIT}`);
+    expect(items[0]?.createdAt).toBe(new Date(1000 * (seeded - 1)).toISOString());
+  });
+
+  it("collapses repeat searches of the same location to the newest occurrence", async () => {
+    const { repo, service } = setup();
+    // A, B, A: storage keeps all three rows (audit trail), display shows two.
+    repo.seed(USER, search({ resolvedName: "London", lat: 51.51, lon: -0.13 }), new Date(1000));
+    repo.seed(USER, search({ resolvedName: "Paris", lat: 48.86, lon: 2.35 }), new Date(2000));
+    repo.seed(USER, search({ resolvedName: "London", lat: 51.51, lon: -0.13 }), new Date(3000));
+
+    const items = await service.listForUser(USER);
+
+    expect(items.map((item) => item.resolvedName)).toEqual(["London", "Paris"]);
+    expect(items[0]?.createdAt).toBe(new Date(3000).toISOString());
+    expect(repo.rows).toHaveLength(3);
+  });
+
+  it("dedupe does not starve the list: the display limit fills despite duplicates", async () => {
+    const { repo, service } = setup();
+    // Every location searched twice — a naive fetch-limit-then-dedupe would
+    // return fewer than HISTORY_LIST_LIMIT distinct entries.
+    for (let i = 0; i < 12; i++) {
+      repo.seed(USER, search({ resolvedName: `City ${i}`, lat: i, lon: i }), new Date(1000 * i));
+      repo.seed(
+        USER,
+        search({ resolvedName: `City ${i}`, lat: i, lon: i }),
+        new Date(1000 * i + 100_000),
+      );
+    }
+
+    const items = await service.listForUser(USER);
+
+    expect(items).toHaveLength(HISTORY_LIST_LIMIT);
+    expect(new Set(items.map((item) => item.resolvedName)).size).toBe(HISTORY_LIST_LIMIT);
   });
 
   it("omits `state` when the stored row has none", async () => {

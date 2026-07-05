@@ -1,4 +1,3 @@
-import { Button } from "@weather-app/ui/components/button";
 import {
   Card,
   CardAction,
@@ -7,20 +6,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@weather-app/ui/components/card";
-import { Droplets, MapPin, Star, Thermometer, Wind } from "lucide-react";
+import { Droplets, MapPin, Thermometer, Wind } from "lucide-react";
 
 import type { WeatherResult } from "@/lib/api";
 import { formatRelativeTime } from "@/lib/format";
 
 import { conditionIcon } from "./condition-icon";
-
-/** Star-toggle state and callback, provided by the container when signed in. */
-export interface WeatherCardFavourite {
-  isFavourite: boolean;
-  /** Disables the toggle while an add/remove mutation is in flight. */
-  isPending: boolean;
-  onToggle: () => void;
-}
 
 function StatTile({
   icon: Icon,
@@ -45,11 +36,11 @@ function StatTile({
 /** Presentational: renders the weather DTO, does no fetching. */
 export function WeatherCard({
   weather,
-  favourite,
+  action,
 }: {
   weather: WeatherResult;
-  /** Omitted when signed out — the star is not rendered at all. */
-  favourite?: WeatherCardFavourite;
+  /** Rendered in the card's top-right action slot (e.g. drag handle, remove). */
+  action?: React.ReactNode;
 }) {
   const { location, current, cache } = weather;
   const place = [location.name, location.state, location.country].filter(Boolean).join(", ");
@@ -69,28 +60,7 @@ export function WeatherCard({
           Updated {formatRelativeTime(current.observedAt)}
           {isCached && " · cached"}
         </CardDescription>
-        {favourite && (
-          <CardAction>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-pressed={favourite.isFavourite}
-              aria-label={
-                favourite.isFavourite
-                  ? `Remove ${location.name} from favourites`
-                  : `Add ${location.name} to favourites`
-              }
-              disabled={favourite.isPending}
-              onClick={favourite.onToggle}
-            >
-              <Star
-                aria-hidden="true"
-                className={favourite.isFavourite ? "fill-current" : undefined}
-              />
-            </Button>
-          </CardAction>
-        )}
+        {action && <CardAction>{action}</CardAction>}
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
         <div className="flex items-center gap-4">

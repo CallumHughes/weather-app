@@ -26,10 +26,6 @@ export interface NewFavourite {
  * Primitive storage operations for favourite locations. The cap and duplicate
  * decision logic lives in FavouritesService so it is unit-testable without a
  * database; implementations (Prisma, in-memory test fake) stay dumb.
- *
- * `sortOrder` is never written here: it stays null until a future manual
- * reorder endpoint writes it. Lists must still respect it (see listForUser)
- * so that endpoint plugs in without touching this interface.
  */
 export interface FavouritesRepo {
   /** The user's favourites: `sortOrder ASC NULLS LAST`, then `createdAt ASC`. */
@@ -37,8 +33,11 @@ export interface FavouritesRepo {
   /** How many favourites the user has (drives the per-user cap). */
   countForUser(userId: string): Promise<number>;
   /**
-   * Insert a favourite. Returns null when the user already has this lat/lon
-   * (the `[userId, lat, lon]` unique key) — the caller maps that to 409.
+   * Insert a favourite at the top of the list: it gets a `sortOrder` below
+   * every existing row (non-null sorts before null, so it also precedes rows
+   * that have never been reordered). Returns null when the user already has
+   * this lat/lon (the `[userId, lat, lon]` unique key) — the caller maps that
+   * to 409.
    */
   create(userId: string, favourite: NewFavourite): Promise<FavouriteRecord | null>;
   /**
@@ -46,6 +45,12 @@ export interface FavouritesRepo {
    * Returns false when nothing was deleted (missing or not owned).
    */
   deleteOwned(userId: string, id: string): Promise<boolean>;
+  /**
+   * Persist a manual order: `sortOrder` = position of the id in `ids`.
+   * Ids not owned by `userId` are ignored (the service validates the set
+   * matches beforehand). Applied atomically.
+   */
+  setOrder(userId: string, ids: string[]): Promise<void>;
 }
 
 /** Prisma unique-constraint violation (duplicate `[userId, lat, lon]`). */
@@ -64,8 +69,9 @@ export class PrismaFavouritesRepo implements FavouritesRepo {
   async listForUser(userId: string): Promise<FavouriteRecord[]> {
     return this.prisma.favouriteLocation.findMany({
       where: { userId },
-      // Ordering contract: manually ordered rows first (future reorder task),
-      // then everything else in creation order.
+      // Ordering contract: ordered rows first (new favourites are created at
+      // the top; reorders rewrite positions), then any legacy null-sortOrder
+      // rows in creation order.
       orderBy: [{ sortOrder: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }],
     });
   }
@@ -76,6 +82,14 @@ export class PrismaFavouritesRepo implements FavouritesRepo {
 
   async create(userId: string, favourite: NewFavourite): Promise<FavouriteRecord | null> {
     try {
+      // New favourites go to the top: one below the current minimum. Legacy
+      // null-sortOrder rows sort after any non-null value, so `min ?? 0` is
+      // safe for them too. Concurrent adds can tie — createdAt breaks the tie
+      // and the next reorder normalises positions to 0..n-1.
+      const { _min } = await this.prisma.favouriteLocation.aggregate({
+        where: { userId },
+        _min: { sortOrder: true },
+      });
       return await this.prisma.favouriteLocation.create({
         data: {
           userId,
@@ -84,6 +98,7 @@ export class PrismaFavouritesRepo implements FavouritesRepo {
           state: favourite.state ?? null,
           lat: favourite.lat,
           lon: favourite.lon,
+          sortOrder: (_min.sortOrder ?? 0) - 1,
         },
       });
     } catch (error) {
@@ -101,5 +116,18 @@ export class PrismaFavouritesRepo implements FavouritesRepo {
     // else's" — the caller maps both to 404 without revealing which.
     const result = await this.prisma.favouriteLocation.deleteMany({ where: { id, userId } });
     return result.count > 0;
+  }
+
+  async setOrder(userId: string, ids: string[]): Promise<void> {
+    // Owner-filtered updates inside a transaction: a foreign id updates zero
+    // rows and the whole order is applied atomically.
+    await this.prisma.$transaction(
+      ids.map((id, index) =>
+        this.prisma.favouriteLocation.updateMany({
+          where: { id, userId },
+          data: { sortOrder: index },
+        }),
+      ),
+    );
   }
 }

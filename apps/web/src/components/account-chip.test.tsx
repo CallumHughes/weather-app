@@ -23,8 +23,8 @@ function setSession(user: { name?: string; email?: string } | null) {
 
 function renderChip() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  // Seed user-scoped caches to assert the sign-out cleanup.
-  queryClient.setQueryData(["favourites"], [{ id: "f1" }]);
+  // Seed the user-scoped cache to assert the sign-out cleanup. (Favourites
+  // are server-rendered now — history is the only React Query cache left.)
   queryClient.setQueryData(["history"], [{ id: "h1" }]);
   render(
     <QueryClientProvider client={queryClient}>
@@ -70,7 +70,7 @@ describe("AccountChip", () => {
     expect(screen.getByRole("button", { name: "Log out" })).toBeInTheDocument();
   });
 
-  it("logging out clears the cached favourites and history", async () => {
+  it("logging out clears the cached history", async () => {
     setSession({ name: "Jane Doe", email: "jane@dev.io" });
     signOutMock.mockImplementation(async (options) => {
       (
@@ -83,7 +83,6 @@ describe("AccountChip", () => {
     await userEvent.click(screen.getByRole("button", { name: "Log out" }));
 
     expect(signOutMock).toHaveBeenCalled();
-    expect(queryClient.getQueryData(["favourites"])).toBeUndefined();
     expect(queryClient.getQueryData(["history"])).toBeUndefined();
   });
 });

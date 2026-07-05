@@ -2,7 +2,7 @@ import type { HistoryRecord, HistoryRepo, NewSearch } from "@/modules/history/hi
 import type { HistoryItem } from "@/modules/history/history.schemas";
 
 /** GET /api/v1/history returns at most this many entries. */
-export const HISTORY_LIST_LIMIT = 10;
+export const HISTORY_LIST_LIMIT = 5;
 
 /** Per-user storage cap; the oldest rows beyond it are evicted on insert. */
 export const HISTORY_MAX_ENTRIES = 50;
@@ -23,9 +23,35 @@ function toHistoryItem(record: HistoryRecord): HistoryItem {
 export class HistoryService {
   constructor(private readonly repo: HistoryRepo) {}
 
+  /**
+   * The user's recent searches for display: newest first, one entry per
+   * location, at most HISTORY_LIST_LIMIT.
+   *
+   * Decision — dedupe at read time, not write time: every search stays in
+   * storage as an audit trail (write-time dedupe only collapses immediate
+   * repeats, see record()), but the displayed list collapses repeat searches
+   * of the same coordinates to their most recent occurrence. Deleting a
+   * visible entry may therefore surface an older search of the same place —
+   * expected, since only that one row was deleted.
+   */
   async listForUser(userId: string): Promise<HistoryItem[]> {
-    const records = await this.repo.listForUser(userId, HISTORY_LIST_LIMIT);
-    return records.map(toHistoryItem);
+    // Scan up to the storage cap so dedupe can't starve the list below the
+    // display limit while distinct locations remain.
+    const records = await this.repo.listForUser(userId, HISTORY_MAX_ENTRIES);
+    const seen = new Set<string>();
+    const distinct: HistoryRecord[] = [];
+    for (const record of records) {
+      const location = `${record.lat}:${record.lon}`;
+      if (seen.has(location)) {
+        continue;
+      }
+      seen.add(location);
+      distinct.push(record);
+      if (distinct.length === HISTORY_LIST_LIMIT) {
+        break;
+      }
+    }
+    return distinct.map(toHistoryItem);
   }
 
   /** Returns false when the entry is missing or belongs to another user. */
