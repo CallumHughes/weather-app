@@ -24,8 +24,10 @@ services:
       dockerfile: apps/server/Dockerfile
     image: weather-app-server
     init: true
-    ports:
-      - "3000:3000"
+    # Deliberately not published to the host: the browser reaches the API
+    # through the web app's BFF proxy, and web reaches it over the compose
+    # network (http://server:3000). Publishing it would let clients hit the
+    # API directly, bypassing the proxy (see ARCHITECTURE.md → API hardening).
     env_file:
       - path: apps/server/.env
         required: false
