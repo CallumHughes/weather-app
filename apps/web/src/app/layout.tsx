@@ -16,8 +16,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "weather-app",
-  description: "weather-app",
+  title: "Weather App",
+  description:
+    "Search current weather for any city — temperature, conditions, wind and humidity — and save favourite locations.",
 };
 
 export default function RootLayout({
