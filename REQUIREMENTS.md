@@ -35,7 +35,7 @@ High-value items the brief marks recommended, or that are cheap now and expensiv
 | S1 | User registration and login with secure password handling | ✅ Done (Better-Auth, scrypt hashing) |
 | S2 | Session management with secure cookies | ✅ Done (httpOnly, secure, sameSite=lax, first-party via BFF proxy) |
 | S3 | Protected endpoints requiring authentication (history) | ✅ Done (Better-Auth session guard on `/api/v1/history`; 401 `UNAUTHENTICATED` envelope, ownership-filtered deletes → 404) |
-| S4 | Per-user search history: recorded on search, viewable, re-runnable | ✅ Done (recorded server-side for signed-in searches with consecutive-duplicate dedupe + 50-row cap; Recent searches panel with click-to-rerun and delete) |
+| S4 | Per-user search history: recorded on search, viewable, re-runnable | ✅ Done (recorded server-side for signed-in searches with consecutive-duplicate dedupe, storage uncapped; Recent searches panel with click-to-rerun and delete) |
 | S5 | Server-side weather cache with TTL to reduce external API calls | ✅ Done (PostgreSQL TTL cache: 10 min weather / 24 h geocode, `x-cache` header, stale-on-upstream-failure) |
 | S6 | API versioning (`/api/v1/...`) — cheap now, breaking change later | ✅ Done (weather routes live under `/api/v1`) |
 | S7 | Health check endpoint (used by Docker/Railway health checks) | ✅ Done (`GET /health` with a 2 s-bounded DB ping: 200 `{ status: "ok" }` / 503 `{ status: "degraded", checks: { database: "down" } }`; docker-compose healthcheck points at it) |

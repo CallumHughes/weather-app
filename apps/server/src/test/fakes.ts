@@ -135,14 +135,6 @@ export class InMemoryHistoryRepo implements HistoryRepo {
   async insert(userId: string, search: NewSearch): Promise<void> {
     this.seed(userId, search, new Date());
   }
-
-  async deleteBeyondNewest(userId: string, keep: number): Promise<void> {
-    const excess = this.sortedForUser(userId).slice(keep);
-    for (const row of excess) {
-      const index = this.rows.indexOf(row);
-      this.rows.splice(index, 1);
-    }
-  }
 }
 
 /** FavouritesRepo fake implementing the same primitives as PrismaFavouritesRepo. */

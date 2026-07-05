@@ -135,9 +135,9 @@ Every commit runs lint/format (Biome via lint-staged) **and the full test suite*
 - **Invalidation**: TTL-based. Keys are versioned (`v1`), so a change to the cached shape busts the cache by bumping the version — no flush needed. Cached payloads are also re-validated against the DTO zod schema on read; a corrupt/outdated payload degrades to a cache miss, never a 500.
 - **Failure isolation**: every cache call goes through a safe wrapper — a thrown cache error is logged and treated as a miss, so cache trouble can never break a weather request.
 
-**Search history**: recorded server-side after each successful weather fetch for signed-in users only (anonymous searches are never stored). A consecutive repeat of the same coordinates updates the existing row (timestamp + raw query) instead of inserting; storage is capped at the newest 50 rows per user (older rows evicted on insert). `GET /api/v1/history` returns the newest 5; `DELETE /api/v1/history/:id` is filtered by owner and returns 404 for anything else (never revealing other users' ids). Recording failures are logged and never fail the weather response.
+**Search history**: recorded server-side after each successful weather fetch for signed-in users only (anonymous searches are never stored). A consecutive repeat of the same coordinates updates the existing row (timestamp + raw query) instead of inserting; storage is uncapped — every search is kept as an audit trail. `GET /api/v1/history` returns the newest 5; `DELETE /api/v1/history/:id` is filtered by owner and returns 404 for anything else (never revealing other users' ids). Recording failures are logged and never fail the weather response.
 
-**Decision — history duplicates are collapsed at read time, not write time**: non-consecutive repeats of the same location (search A, B, A) are all stored — the rows are an audit trail of what the user actually searched and when — but `GET /api/v1/history` collapses each location (keyed by coordinates, the same identity favourites use) to its most recent occurrence, so the displayed list never shows duplicates. The service scans up to the 50-row storage cap before applying the 10-item display limit, so dedupe cannot starve the list while distinct locations remain. Consequence accepted: deleting a visible entry removes only that row, so an older search of the same place may resurface in the list.
+**Decision — history duplicates are collapsed at read time, not write time**: non-consecutive repeats of the same location (search A, B, A) are all stored — the rows are an audit trail of what the user actually searched and when — but `GET /api/v1/history` collapses each location (keyed by coordinates, the same identity favourites use) to its most recent occurrence, so the displayed list never shows duplicates. The service scans the newest 50 rows (a read-side bound — storage itself is uncapped) before applying the 5-item display limit, so dedupe cannot starve the list while distinct locations remain. Consequence accepted: deleting a visible entry removes only that row, so an older search of the same place may resurface in the list (now tracked in [Known bugs](#known-bugs)).
 
 **Favourite locations** (`favourite_location`, reusing the protected-endpoint pattern from search history): a signed-in user saves the resolved location of a weather result (star toggle in the UI → `POST /api/v1/favourites`), lists them (`GET /api/v1/favourites`) and removes them (`DELETE /api/v1/favourites/:id`, owner-filtered → 404, exactly like history). Unlike history's evict-oldest cap, favourites are an explicit collection, so the cap of **20 per user rejects** the 21st add (400 `FAVOURITES_LIMIT_REACHED`) rather than silently dropping something the user chose to keep. Duplicates are enforced by a `[userId, lat, lon]` unique key — coordinates come from the 24 h-cached geocode on both the weather and favourites paths, unrounded, so the same place always yields byte-identical floats — and surface as 409 `ALREADY_FAVOURITE` (which the web client treats as stale-state success). The list ordering contract is **`sortOrder ASC NULLS LAST`, then `createdAt ASC`**: creates assign `sortOrder = min − 1` so new favourites land at the top of the list, and `PUT /api/v1/favourites/order` (the manual-reorder endpoint this column was the seam for — it landed without a migration) rewrites positions to `0..n−1` in a transaction. The body must be the complete id set of the user's current favourites; a mismatch (stale tab, foreign id) is rejected with 409 `FAVOURITES_OUT_OF_SYNC` without revealing ownership. Legacy null-`sortOrder` rows sort last in creation order.
 
@@ -182,6 +182,22 @@ The OpenAPI 3.1 spec is **generated from the zod route schemas** — the same sc
 - Weather data freshness on the order of minutes is acceptable (drives the cache TTL).
 - No PII is stored beyond email address and name for authentication.
 - Modern evergreen browsers; no legacy browser support.
+
+## Known bugs
+
+Documented rather than fixed for now (time constraints), with the intended fix written down so it can be picked up later.
+
+**Recent searches — re-running and deleting have correctness gaps.** Two related defects in the history panel:
+
+- *Re-running a recent search can open the wrong place.* A history row stores the fully resolved location (name, state, country, lat/lon), but clicking it re-submits only the bare resolved name to `GET /api/v1/weather`, which re-geocodes free text. An ambiguous name can resolve to a different city than the stored row — a "London, Ontario, CA" entry re-searches as "London" and shows London, GB. Each re-run also records a fresh history row.
+- *Deleted searches can resurface.* Deletion removes a single row while the displayed list is deduped by location at read time, so after deleting the visible entry an older search of the same place reappears (the consequence conceded under Data and persistence, now acknowledged as a UX bug).
+
+Intended fix, in order:
+
+1. **Window the history query by `createdAt`** — list searches from the past week rather than a fixed row count.
+2. **Replace delete with hide** — hiding suppresses every search sharing the same lat/lon for that user (coordinates are the location identity, as favourites already treat them), so a hidden place cannot resurface through older rows.
+3. **Add `updatedAt` to the `search_history` schema** so the hide can be tracked on the row.
+4. **Allow the search API to take a lat/lon pair**, and have the recent-searches panel re-run entries by coordinates instead of by name — a name doesn't always resolve to the same place, coordinates always do.
 
 ## Future improvements
 

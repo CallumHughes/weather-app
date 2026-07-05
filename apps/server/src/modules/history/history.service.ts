@@ -4,8 +4,12 @@ import type { HistoryItem } from "@/modules/history/history.schemas";
 /** GET /api/v1/history returns at most this many entries. */
 export const HISTORY_LIST_LIMIT = 5;
 
-/** Per-user storage cap; the oldest rows beyond it are evicted on insert. */
-export const HISTORY_MAX_ENTRIES = 50;
+/**
+ * Read-side bound: how many newest rows the display-list dedupe scans.
+ * Storage itself is uncapped (every search is kept as an audit trail), so
+ * this keeps the list read O(1) regardless of how much history accrues.
+ */
+export const HISTORY_DEDUPE_SCAN_LIMIT = 50;
 
 function toHistoryItem(record: HistoryRecord): HistoryItem {
   return {
@@ -35,9 +39,9 @@ export class HistoryService {
    * expected, since only that one row was deleted.
    */
   async listForUser(userId: string): Promise<HistoryItem[]> {
-    // Scan up to the storage cap so dedupe can't starve the list below the
-    // display limit while distinct locations remain.
-    const records = await this.repo.listForUser(userId, HISTORY_MAX_ENTRIES);
+    // Bounded scan so dedupe can't starve the list below the display limit
+    // while distinct locations remain, without reading unbounded storage.
+    const records = await this.repo.listForUser(userId, HISTORY_DEDUPE_SCAN_LIMIT);
     const seen = new Set<string>();
     const distinct: HistoryRecord[] = [];
     for (const record of records) {
@@ -60,12 +64,9 @@ export class HistoryService {
   }
 
   /**
-   * Record a successful search for a signed-in user.
-   *
-   * - Consecutive dedupe: a repeat of the most recent location refreshes
-   *   that entry (timestamp + raw query) instead of inserting a new row.
-   * - Cap: after an insert, rows beyond the newest HISTORY_MAX_ENTRIES are
-   *   evicted.
+   * Record a successful search for a signed-in user. Consecutive dedupe: a
+   * repeat of the most recent location refreshes that entry (timestamp + raw
+   * query) instead of inserting a new row. Storage is uncapped.
    */
   async record(userId: string, search: NewSearch): Promise<void> {
     const latest = await this.repo.findLatestForUser(userId);
@@ -74,6 +75,5 @@ export class HistoryService {
       return;
     }
     await this.repo.insert(userId, search);
-    await this.repo.deleteBeyondNewest(userId, HISTORY_MAX_ENTRIES);
   }
 }

@@ -24,8 +24,8 @@ export interface NewSearch {
 }
 
 /**
- * Primitive storage operations for search history. The dedupe and cap
- * decision logic lives in HistoryService so it is unit-testable without a
+ * Primitive storage operations for search history. The dedupe decision
+ * logic lives in HistoryService so it is unit-testable without a
  * database; implementations (Prisma, in-memory test fake) stay dumb.
  */
 export interface HistoryRepo {
@@ -41,8 +41,6 @@ export interface HistoryRepo {
   /** Refresh an entry in place: bump `createdAt` to now and update the raw query. */
   touch(id: string, query: string): Promise<void>;
   insert(userId: string, search: NewSearch): Promise<void>;
-  /** Delete the user's rows beyond the newest `keep`. */
-  deleteBeyondNewest(userId: string, keep: number): Promise<void>;
 }
 
 export class PrismaHistoryRepo implements HistoryRepo {
@@ -89,19 +87,5 @@ export class PrismaHistoryRepo implements HistoryRepo {
         lon: search.lon,
       },
     });
-  }
-
-  async deleteBeyondNewest(userId: string, keep: number): Promise<void> {
-    const excess = await this.prisma.searchHistory.findMany({
-      where: { userId },
-      orderBy: { createdAt: "desc" },
-      skip: keep,
-      select: { id: true },
-    });
-    if (excess.length > 0) {
-      await this.prisma.searchHistory.deleteMany({
-        where: { id: { in: excess.map((row) => row.id) } },
-      });
-    }
   }
 }

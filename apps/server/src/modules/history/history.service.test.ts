@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import type { NewSearch } from "@/modules/history/history.repo";
 import {
+  HISTORY_DEDUPE_SCAN_LIMIT,
   HISTORY_LIST_LIMIT,
-  HISTORY_MAX_ENTRIES,
   HistoryService,
 } from "@/modules/history/history.service";
 import { InMemoryHistoryRepo } from "@/test/fakes";
@@ -68,19 +68,16 @@ describe("HistoryService.record", () => {
     expect(repo.rows).toHaveLength(2);
   });
 
-  it("caps storage: the 51st distinct search evicts the oldest", async () => {
+  it("storage is uncapped: distinct searches beyond the dedupe scan limit all persist", async () => {
     const { repo, service } = setup();
-    for (let i = 0; i < HISTORY_MAX_ENTRIES; i++) {
+    const total = HISTORY_DEDUPE_SCAN_LIMIT + 1;
+    for (let i = 0; i < total; i++) {
       await service.record(USER, search({ resolvedName: `City ${i}`, lat: i, lon: i }));
     }
-    expect(repo.rows).toHaveLength(HISTORY_MAX_ENTRIES);
 
-    await service.record(USER, search({ resolvedName: "City 50", lat: 50.5, lon: 50.5 }));
-
-    expect(repo.rows).toHaveLength(HISTORY_MAX_ENTRIES);
+    expect(repo.rows).toHaveLength(total);
     const names = repo.rows.map((row) => row.resolvedName);
-    expect(names).not.toContain("City 0"); // oldest evicted
-    expect(names).toContain("City 50"); // newest kept
+    expect(names).toContain("City 0"); // oldest kept — nothing evicted
   });
 });
 
