@@ -6,8 +6,9 @@
     "dev": "next dev --port 3001",
     "build": "next build && ([ -d public ] && cp -r public .next/standalone/apps/web/public || true) && cp -r .next/static .next/standalone/apps/web/.next/static",
     "start": "node .next/standalone/apps/web/server.js",
-    "test": "vitest run",
-    "lint": "biome check ."
+    "check-types": "next typegen && tsc --noEmit",
+    "lint": "biome check .",
+    "test": "vitest run"
   },
   "dependencies": {
     "@swc/helpers": "^0.5.23",
