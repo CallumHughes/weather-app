@@ -42,5 +42,18 @@
     "nx": "^22.7.5",
     "typescript": "catalog:"
   },
+  "nx": {
+    "includedScripts": [],
+    "targets": {
+      "lint": {
+        "command": "biome check --no-errors-on-unmatched *.json *.jsonc",
+        "cache": true,
+        "inputs": [
+          "{workspaceRoot}/*.json",
+          "{workspaceRoot}/*.jsonc"
+        ]
+      }
+    }
+  },
   "packageManager": "pnpm@10.32.1"
 }

@@ -149,7 +149,7 @@ Environment variables are read from each app's `.env` file (baked into web build
 - Initialize hooks: `pnpm run prepare`
 - Run checks: `pnpm run check`
 
-The pre-commit hook runs Biome lint and the full test suite across every project (`pnpm nx run-many -t lint test`). Both are Nx-managed targets, so Nx caching keeps this fast — unaffected projects replay cached results. Lint is check-only in the hook; run `pnpm run check` to apply fixes. (Root-level files outside any project — this README, `docker-compose.yml` — are only covered by `pnpm run check`.) This acts as a lightweight CI alternative for now; see the decision in [ARCHITECTURE.md](ARCHITECTURE.md).
+The pre-commit hook runs Biome lint and the full test suite across every project (`pnpm nx run-many -t lint test`). Both are Nx-managed targets, so Nx caching keeps this fast — unaffected projects replay cached results. The workspace root is itself an Nx project whose `lint` target covers the root-level config files, so the hook checks the whole repo. Lint is check-only in the hook; run `pnpm run check` to apply fixes. This acts as a lightweight CI alternative for now; see the decision in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Project Structure
 
