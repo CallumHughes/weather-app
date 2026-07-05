@@ -15,6 +15,7 @@ graph LR
     AUTH[Better-Auth handler]
     WX[Weather routes]
     HIST[History routes]
+    FAV[Favourites routes]
   end
   DB[(PostgreSQL)]
   EXT[OpenWeather API]
@@ -24,6 +25,7 @@ graph LR
   AUTH --> DB
   WX -->|TTL cache + history recording| DB
   HIST -->|session-guarded| DB
+  FAV -->|session-guarded| DB
   WX --> EXT
 ```
 
@@ -61,28 +63,26 @@ The project was scaffolded with [create-better-t-stack](https://github.com/AmanV
 
 | Technology | Role | Why |
 |------------|------|-----|
-| TypeScript | Language across the whole stack | _TODO_ |
-| Next.js (App Router) | Front-end framework | _TODO_ |
-| React | UI library | _TODO_ |
-| Tailwind CSS | Styling | _TODO_ |
-| shadcn/ui (`packages/ui`) | UI component primitives | _TODO_ |
-| Fastify | Back-end HTTP framework | _TODO_ |
-| Node.js | Server runtime | _TODO_ |
-| PostgreSQL | Database | _TODO_ |
-| Prisma | ORM and migrations | _TODO_ |
-| Better-Auth | Authentication (email/password, sessions) | _TODO_ |
-| Zod | Schema validation (env, API input) | _TODO_ |
-| @t3-oss/env | Fail-fast environment variable validation | _TODO_ |
-| TanStack Form | Form state and validation | _TODO_ |
+| TypeScript | Language across the whole stack | The language I'm most experienced with, and one language end-to-end means one set of tooling (lint, test) with types, schema validation, and libraries shared across apps and packages. Nothing in this app's workload is likely to hit a performance or library ceiling that would justify a second language |
+| Next.js (App Router) | Front-end framework | Previous production experience, and the App Router extras earn their keep here: server components/streaming render the favourites board, and rewrites power the BFF proxy |
+| React | UI library | Follows from the Next.js choice |
+| Tailwind CSS | Styling | Scaffolded and kept: co-located utility classes and shared design tokens make visual consistency easy |
+| shadcn/ui (`packages/ui`) | UI component primitives | Scaffolded and kept: accessible, ready-to-use primitives, vendored into `packages/ui` so they are edited like project code rather than a black-box dependency |
+| Fastify | Back-end HTTP framework | Prior experience over other REST frameworks, and a REST-first framework maps directly onto the brief's RESTful API requirement |
+| Node.js | Server runtime | The most widely supported runtime for a TypeScript back-end |
+| PostgreSQL | Database | Widely supported relational database with mature tooling; a single datastore also covers the TTL weather cache (justified against Redis under [Data and persistence](#data-and-persistence)) |
+| Prisma | ORM and migrations | Prior experience (over e.g. Drizzle); schema-first migrations and a generated typed client keep database management low-friction |
+| Better-Auth | Authentication (email/password, sessions) | Free and self-hosted, with a plugin ecosystem that slots into this stack; email/password + cookie sessions doesn't warrant a heavyweight managed solution |
+| Zod | Schema validation (env, API input) | One schema language shared across front-end and back-end (env, API input/output — and the OpenAPI spec is generated from the same schemas) |
+| TanStack Form | Form state and validation | Modern, type-safe form state handling that validates with the same zod schemas |
 | TanStack Query | Server-state management on the front-end | Declarative fetch lifecycle (loading/error/success) with caching, request de-duplication, and selective retries out of the box — replaces hand-rolled effect/state plumbing and keeps data logic out of presentational components |
 | OpenWeather | External weather data provider | Clear API documentation and a large community/support ecosystem; free tier covers geocoding + current weather (see [Weather provider](#weather-provider-openweather)) |
-| evlog | Structured request/error logging | _TODO_ |
-| Nx | Monorepo task orchestration and caching | _TODO_ |
-| pnpm workspaces | Package management | _TODO_ |
-| Biome | Linting and formatting | _TODO_ |
-| Husky + lint-staged | Pre-commit quality gates | _TODO_ |
-| Docker + Compose | Containerisation, local full-stack runs | _TODO_ |
-| Railway | Hosting (web, server, PostgreSQL) | _TODO_ |
+| evlog | Structured request/error logging | Structured events with simple console formatting — the right weight for this app's observability needs |
+| Nx | Monorepo task orchestration and caching | More prior experience than with Turborepo; low-config task orchestration and computation caching |
+| Biome | Linting and formatting | Formatting and linting in one fast tool — a single config instead of an ESLint + Prettier split |
+| Husky + lint-staged | Pre-commit quality gates | A low-effort developer-experience win (see [Pre-commit quality gates](#pre-commit-quality-gates-instead-of-ci-for-now)) |
+| Docker + Compose | Containerisation, local full-stack runs | One consistent packaging and deploy method for every app — natural for the long-running REST API — that keeps deployment-platform options open |
+| Railway | Hosting (web, server, PostgreSQL) | Prior experience; container-friendly and quick to deploy all services plus PostgreSQL |
 
 ### Weather provider: OpenWeather
 
@@ -128,11 +128,11 @@ Every commit runs lint/format (Biome via lint-staged) **and the full test suite*
 
 **Weather cache strategy** (`apps/server/src/modules/weather/weather.constants.ts`):
 
-- **Keys and granularity**: geocode lookups are cached as `geo:v1:{query, trimmed + lowercased}`; current weather as `wx:v1:{lat}:{lon}` with coordinates rounded to 2 dp (~1 km), so nearby queries share one entry. The cached payload is the mapped DTO, never the raw upstream body.
+- **Keys and granularity**: geocode lookups are cached as `geo:v1:{query, trimmed + lowercased}`; current weather as `wx:v2:{lat}:{lon}` with coordinates rounded to 2 dp (~1 km), so nearby queries share one entry. The cached weather payload is the mapped `current` conditions block only (no location fields), so free-text searches and coordinate lookups (favourites refresh) share entries — never the raw upstream body.
 - **TTLs**: 10 minutes for current weather (freshness on the order of minutes is acceptable, see Assumptions), 24 hours for geocoding (places don't move).
 - **Expiry and cleanup**: expiry is checked lazily on read; expired rows are retained for a stale window (24 h) and deleted lazily only beyond it, so they stay available as a fallback. A periodic sweep of long-expired rows is a noted future improvement.
 - **Stale-on-upstream-failure**: when OpenWeather fails (502/504 paths) and an expired entry exists, the API serves it instead of the error. Cache behaviour is surfaced per response via the `x-cache: HIT | MISS | STALE` header on `GET /api/v1/weather`.
-- **Invalidation**: TTL-based. Keys are versioned (`v1`), so a change to the cached shape busts the cache by bumping the version — no flush needed. Cached payloads are also re-validated against the DTO zod schema on read; a corrupt/outdated payload degrades to a cache miss, never a 500.
+- **Invalidation**: TTL-based. Keys are versioned, so a change to the cached shape busts the cache by bumping the version — no flush needed (used once already: `wx:v1` → `wx:v2` when the cached payload dropped its location fields). Cached payloads are also re-validated against the DTO zod schema on read; a corrupt/outdated payload degrades to a cache miss, never a 500.
 - **Failure isolation**: every cache call goes through a safe wrapper — a thrown cache error is logged and treated as a miss, so cache trouble can never break a weather request.
 
 **Search history**: recorded server-side after each successful weather fetch for signed-in users only (anonymous searches are never stored). A consecutive repeat of the same coordinates updates the existing row (timestamp + raw query) instead of inserting; storage is uncapped — every search is kept as an audit trail. `GET /api/v1/history` returns the newest 5; `DELETE /api/v1/history/:id` is filtered by owner and returns 404 for anything else (never revealing other users' ids). Recording failures are logged and never fail the weather response.
@@ -189,7 +189,7 @@ Documented rather than fixed for now (time constraints), with the intended fix w
 
 **Recent searches — re-running and deleting have correctness gaps.** Two related defects in the history panel:
 
-- *Re-running a recent search can open the wrong place.* A history row stores the fully resolved location (name, state, country, lat/lon), but clicking it re-submits only the bare resolved name to `GET /api/v1/weather`, which re-geocodes free text. An ambiguous name can resolve to a different city than the stored row — a "London, Ontario, CA" entry re-searches as "London" and shows London, GB. Each re-run also records a fresh history row.
+- *Re-running a recent search can open the wrong place.* A history row stores the fully resolved location (name, state, country, lat/lon), but clicking it re-submits only the bare resolved name to `GET /api/v1/weather`, which re-geocodes free text. An ambiguous name can resolve to a different city than the stored row — a "London, Ontario, CA" entry re-searches as "London" and shows London, GB. (Each re-run recording a fresh history row is intended — searches double as usage metrics — but when the name mis-resolves, the recorded row is wrong too.)
 - *Deleted searches can resurface.* Deletion removes a single row while the displayed list is deduped by location at read time, so after deleting the visible entry an older search of the same place reappears (the consequence conceded under Data and persistence, now acknowledged as a UX bug).
 
 Intended fix, in order:
@@ -197,7 +197,7 @@ Intended fix, in order:
 1. **Window the history query by `createdAt`** — list searches from the past week rather than a fixed row count.
 2. **Replace delete with hide** — hiding suppresses every search sharing the same lat/lon for that user (coordinates are the location identity, as favourites already treat them), so a hidden place cannot resurface through older rows.
 3. **Add `updatedAt` to the `search_history` schema** so the hide can be tracked on the row.
-4. **Allow the search API to take a lat/lon pair**, and have the recent-searches panel re-run entries by coordinates instead of by name — a name doesn't always resolve to the same place, coordinates always do.
+4. **Re-run recent searches by coordinates** — extend the search endpoint (`GET /api/v1/weather`) to accept a lat/lon pair as an alternative to free text, and have the recent-searches panel re-run entries with the stored coordinates — a name doesn't always resolve to the same place, coordinates always do. Deliberately *not* `GET /api/v1/weather/current`: that endpoint never records history, and a re-run is a real search that must land in the history like any other — the rows are usage metrics as well as the audit trail.
 
 ## Future improvements
 
@@ -205,7 +205,7 @@ With more time, in rough priority order:
 
 1. **CI pipeline** (GitHub Actions): lint, type-check, and test on every push — including DB integration tests for the Prisma cache/history/favourites implementations against a PostgreSQL service container (currently exercised via stubs only).
 2. **Forecast** — extend the weather provider client with a short forecast endpoint.
-3. **Favourites reordering** — a `PUT /api/v1/favourites/order` endpoint writing the already-present `sortOrder` column (see Data and persistence); the model, ordering contract, and list behaviour need no changes.
+3. **Touch/keyboard favourites reordering** — the reorder endpoint and the board's drag-and-drop are in place, but dragging is mouse-only; touch and keyboard support would make reordering usable on mobile and accessible.
 4. **E2E coverage** — a Playwright happy path (register → search → see weather → revisit history).
 5. **Observability** — metrics (request duration, upstream latency, cache hit rate) on top of the existing structured logging.
 6. **Password reset / email verification** to round out the auth story.

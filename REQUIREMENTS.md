@@ -2,7 +2,7 @@
 
 Requirements derived from the tech assignment brief, prioritised using MoSCoW. Status reflects the current state of the codebase.
 
-Persistence choice: the brief requires at least one of search history / favourite locations / cached weather data. This project implements **search history** and **server-side cached weather data** (favourites is a could-have).
+Persistence choice: the brief requires at least one of search history / favourite locations / cached weather data. This project implements all three: **search history**, **favourite locations**, and **server-side cached weather data**.
 
 ## Must have
 
@@ -24,7 +24,7 @@ Core functionality and the items the brief lists as required.
 | M12 | Back-end unit tests (business logic, utilities) and integration tests (API endpoints, edge cases: invalid input, upstream failure) | ✅ Done (Vitest; DTO-mapping/cache/history-logic unit tests + endpoint tests with OpenWeather mocked at the HTTP layer, cache and history storage as in-memory fakes, sessions stubbed: 200/400/401/404/502/504, cache HIT/MISS/STALE. Caveat: the Prisma implementations are exercised against stubs, not a real PostgreSQL — DB integration tests are a known gap that CI with a service container would close) |
 | M13 | Front-end unit tests (components, hooks, utilities) | ✅ Done for the weather feature (Vitest + Testing Library: card rendering, search flow incl. loading/not-found/error/retry, history panel incl. signed-out hint/loading/empty/error/delete/click-to-rerun; auth drawer incl. open/mode-switch/close-on-success) |
 | M14 | Clear instructions to run the full application locally | ✅ Done (README) |
-| M15 | Architecture description and write-up of decisions/trade-offs | 🚧 In progress (ARCHITECTURE.md) |
+| M15 | Architecture description and write-up of decisions/trade-offs | ✅ Done (ARCHITECTURE.md: system diagram, technology justifications, key decisions with trade-offs, assumptions, known bugs, future improvements, scaling approach) |
 
 ## Should have
 
@@ -53,11 +53,11 @@ Nice-to-haves from the brief's optional enhancements, in rough value-per-effort 
 | C1 | CI pipeline (lint, type-check, test on push) | ⬜ To do |
 | C2 | API documentation (OpenAPI/Swagger generated from route schemas) | ✅ Done (OpenAPI 3.1 spec generated from the zod route schemas via `@fastify/swagger`, committed at `apps/fumadocs/openapi/weather-api.json` with a spec-drift test, rendered by the Fumadocs app on `pnpm nx dev fumadocs`; regenerate with `pnpm run docs:generate`) |
 | C3 | Short forecast (extended weather data) | ⬜ To do |
-| C4 | Favourite locations (save/manage) | ✅ Done (star toggle on the weather result + Favourites panel; `GET/POST /api/v1/favourites`, `DELETE /api/v1/favourites/:id` behind the session guard; 20-favourite cap, duplicates rejected on the `[userId, lat, lon]` unique key; manual reordering is a documented follow-up — the `sortOrder` column and ordering contract are already in place) |
+| C4 | Favourite locations (save/manage) | ✅ Done (star toggle on the weather result + Favourites panel; `GET/POST /api/v1/favourites`, `DELETE /api/v1/favourites/:id` behind the session guard; 20-favourite cap, duplicates rejected on the `[userId, lat, lon]` unique key; drag-and-drop reordering via `PUT /api/v1/favourites/order` — mouse-only for now, touch/keyboard support is a documented follow-up) |
 | C5 | Response compression | ⬜ To do |
 | C6 | Pagination on search history | ⬜ To do |
 | C7 | One E2E happy-path test (Playwright) | ⬜ To do |
-| C8 | UX polish: animations/transitions, empty states, retry options | ⬜ To do |
+| C8 | UX polish: animations/transitions, empty states, retry options | ✅ Done (shared-element/layout animations on the favourites board and search dialog via motion; empty states for favourites and history; retry buttons on failed weather and history fetches) |
 | C9 | Accessibility checks (ARIA, keyboard navigation) | ⬜ To do |
 
 ## Won't have (this iteration)
