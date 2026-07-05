@@ -2,6 +2,13 @@
 
 import { Button } from "@weather-app/ui/components/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@weather-app/ui/components/card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@weather-app/ui/components/empty";
 import { Skeleton } from "@weather-app/ui/components/skeleton";
 import { History, Trash2 } from "lucide-react";
 
@@ -30,18 +37,30 @@ export function SearchHistory({ isSignedIn }: SearchHistoryProps) {
   const deleteItem = useDeleteHistoryItem();
 
   if (!isSignedIn) {
-    // Signed out: a single subtle line, no panel (and no history fetch).
-    // The link-style button opens the auth drawer instead of a /login page.
+    // Signed out: same placeholder treatment as the favourites board (and no
+    // history fetch). The link-style button opens the auth drawer instead of
+    // a /login page.
     return (
-      <p className="text-muted-foreground text-sm" data-testid="history-signed-out">
-        <AuthDrawer
-          trigger={
-            <button type="button" className="underline underline-offset-4 hover:text-foreground">
-              Sign in to keep your search history
-            </button>
-          }
-        />
-      </p>
+      <Empty className="border border-dashed" data-testid="history-signed-out">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <History aria-hidden="true" />
+          </EmptyMedia>
+          <EmptyTitle>Recent searches</EmptyTitle>
+          <EmptyDescription>
+            <AuthDrawer
+              trigger={
+                <button
+                  type="button"
+                  className="underline underline-offset-4 hover:text-foreground"
+                >
+                  Sign in to keep your search history
+                </button>
+              }
+            />
+          </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     );
   }
 
