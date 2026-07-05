@@ -17,6 +17,11 @@ vi.mock("sonner", () => ({
   toast: { error: vi.fn() },
 }));
 
+// The signed-out empty state renders AuthDrawer, whose forms import the auth client.
+vi.mock("@/lib/auth-client", () => ({
+  authClient: { useSession: vi.fn(() => ({ data: null, isPending: false })) },
+}));
+
 const removeFavouriteActionMock = vi.mocked(removeFavouriteAction);
 const reorderFavouritesActionMock = vi.mocked(reorderFavouritesAction);
 
@@ -165,5 +170,13 @@ describe("FavouritesBoard", () => {
     expect(screen.getByTestId("favourites-empty")).toHaveTextContent(
       "Search for a city, then sign in to save it here.",
     );
+  });
+
+  it("signed out: the sign-in link opens the auth drawer", async () => {
+    renderBoard([], { isSignedIn: false });
+
+    await userEvent.click(screen.getByRole("button", { name: "sign in" }));
+
+    expect(screen.getByText("Sign in to keep favourites and search history.")).toBeInTheDocument();
   });
 });
