@@ -80,7 +80,7 @@ The project was scaffolded with [create-better-t-stack](https://github.com/AmanV
 | evlog | Structured request/error logging | Structured events with simple console formatting — the right weight for this app's observability needs |
 | Nx | Monorepo task orchestration and caching | More prior experience than with Turborepo; low-config task orchestration and computation caching |
 | Biome | Linting and formatting | Formatting and linting in one fast tool — a single config instead of an ESLint + Prettier split |
-| Husky + lint-staged | Pre-commit quality gates | A low-effort developer-experience win (see [Pre-commit quality gates](#pre-commit-quality-gates-instead-of-ci-for-now)) |
+| Husky | Pre-commit quality gates | A low-effort developer-experience win (see [Pre-commit quality gates](#pre-commit-quality-gates-instead-of-ci-for-now)) |
 | Docker + Compose | Containerisation, local full-stack runs | One consistent packaging and deploy method for every app — natural for the long-running REST API — that keeps deployment-platform options open |
 | Railway | Hosting (web, server, PostgreSQL) | Prior experience; container-friendly and quick to deploy all services plus PostgreSQL |
 
@@ -114,7 +114,7 @@ Both apps are packaged as Docker containers (`apps/*/Dockerfile`, with the Next.
 
 ### Pre-commit quality gates instead of CI (for now)
 
-Every commit runs lint/format (Biome via lint-staged) **and the full test suite** (`nx run-many -t test`) through the husky pre-commit hook.
+Every commit runs Biome lint **and the full test suite** across the workspace (`nx run-many -t lint test`) through the husky pre-commit hook. Both are per-project Nx targets, so both benefit from computation caching.
 
 **Why:** with a single developer and no shared branches yet, a pre-commit test run is an easy CI alternative — it gives the core CI guarantee (no commit lands with failing tests) with zero infrastructure. Nx's computation caching keeps it fast: projects unaffected by the commit replay cached results rather than re-running.
 

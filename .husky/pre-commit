@@ -1,2 +1,1 @@
-lint-staged
-pnpm nx run-many -t test
+pnpm nx run-many -t lint test

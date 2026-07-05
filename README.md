@@ -149,7 +149,7 @@ Environment variables are read from each app's `.env` file (baked into web build
 - Initialize hooks: `pnpm run prepare`
 - Run checks: `pnpm run check`
 
-The pre-commit hook runs lint/format on staged files (Biome via lint-staged) and the full test suite (`pnpm nx run-many -t test`). Nx caching keeps this fast — unaffected projects replay cached results. This acts as a lightweight CI alternative for now; see the decision in [ARCHITECTURE.md](ARCHITECTURE.md).
+The pre-commit hook runs Biome lint and the full test suite across every project (`pnpm nx run-many -t lint test`). Both are Nx-managed targets, so Nx caching keeps this fast — unaffected projects replay cached results. Lint is check-only in the hook; run `pnpm run check` to apply fixes. (Root-level files outside any project — this README, `docker-compose.yml` — are only covered by `pnpm run check`.) This acts as a lightweight CI alternative for now; see the decision in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Project Structure
 
@@ -183,6 +183,7 @@ Tasks are orchestrated by [Nx](https://nx.dev) (with computation caching, so unc
 | Build all apps | `pnpm nx run-many -t build` | `pnpm run build` |
 | Type-check all projects | `pnpm nx run-many -t check-types` | `pnpm run check-types` |
 | Run all tests (Vitest) | `pnpm nx run-many -t test` | `pnpm run test` |
+| Lint all projects (Biome, check-only) | `pnpm nx run-many -t lint` | `pnpm run lint` |
 
 ### Database
 
