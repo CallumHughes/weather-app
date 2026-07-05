@@ -127,27 +127,23 @@ export function buildApp(options: BuildAppOptions = {}): FastifyInstance {
       // Excluded from the OpenAPI spec: this is a pass-through proxy to
       // Better-Auth, covered by the hand-written Authentication docs page.
       schema: { hide: true },
+      // No try/catch: a thrown error here means the proxy glue or Better-Auth
+      // itself failed (normal auth failures are Response objects passed
+      // through below), so it propagates to the shared error handler — logged
+      // and returned as 500 INTERNAL_ERROR on the standard envelope.
       async handler(request, reply) {
-        try {
-          const url = new URL(request.url, `http://${request.headers.host}`);
-          const req = new Request(url.toString(), {
-            method: request.method,
-            headers: toWebHeaders(request.headers),
-            body: request.body ? JSON.stringify(request.body) : undefined,
-          });
-          const response = await auth.handler(req);
-          reply.status(response.status);
-          response.headers.forEach((value, key) => {
-            reply.header(key, value);
-          });
-          reply.send(response.body ? await response.text() : null);
-        } catch (error) {
-          instance.log.error({ err: error }, "Authentication Error:");
-          reply.status(500).send({
-            error: "Internal authentication error",
-            code: "AUTH_FAILURE",
-          });
-        }
+        const url = new URL(request.url, `http://${request.headers.host}`);
+        const req = new Request(url.toString(), {
+          method: request.method,
+          headers: toWebHeaders(request.headers),
+          body: request.body ? JSON.stringify(request.body) : undefined,
+        });
+        const response = await auth.handler(req);
+        reply.status(response.status);
+        response.headers.forEach((value, key) => {
+          reply.header(key, value);
+        });
+        reply.send(response.body ? await response.text() : null);
       },
     });
   });
