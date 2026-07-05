@@ -7,11 +7,10 @@ import {
   CardTitle,
 } from "@weather-app/ui/components/card";
 import { Droplets, MapPin, Thermometer, Wind } from "lucide-react";
+import Image from "next/image";
 
 import type { WeatherResult } from "@/lib/api";
 import { formatRelativeTime } from "@/lib/format";
-
-import { conditionIcon } from "./condition-icon";
 
 function StatTile({
   icon: Icon,
@@ -47,7 +46,6 @@ export function WeatherCard({
   // HIT/STALE means the server answered from its weather cache; MISS (or a
   // missing header) means a fresh upstream fetch — nothing worth flagging.
   const isCached = cache === "HIT" || cache === "STALE";
-  const ConditionIcon = conditionIcon(current.condition.main);
 
   return (
     <Card data-testid="weather-card">
@@ -64,7 +62,14 @@ export function WeatherCard({
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
         <div className="flex items-center gap-4">
-          <ConditionIcon aria-hidden="true" className="size-11 shrink-0 text-muted-foreground" />
+          <Image
+            src={`https://openweathermap.org/img/wn/${current.condition.icon}@2x.png`}
+            alt=""
+            aria-hidden="true"
+            width={100}
+            height={100}
+            className="size-14 shrink-0"
+          />
           <div>
             <p className="font-medium text-4xl tabular-nums leading-none">
               {Math.round(current.temperatureC)}°C

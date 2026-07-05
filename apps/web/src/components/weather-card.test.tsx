@@ -27,6 +27,18 @@ describe("WeatherCard", () => {
     expect(screen.getByText(/^Updated /)).toBeInTheDocument();
   });
 
+  it("renders OpenWeather's icon for the DTO's icon code", () => {
+    const { container } = render(<WeatherCard weather={londonWeatherFixture} />);
+
+    // Decorative (aria-hidden, empty alt) — the description text sits beside it.
+    // next/image routes the src through the optimizer, so decode before asserting.
+    const icon = container.querySelector("img");
+    expect(decodeURIComponent(icon?.getAttribute("src") ?? "")).toContain(
+      "https://openweathermap.org/img/wn/04d@2x.png",
+    );
+    expect(icon).toHaveAttribute("alt", "");
+  });
+
   it("omits the state when the location has none", () => {
     const { location, current } = londonWeatherFixture;
     const { state: _state, ...locationWithoutState } = location;
