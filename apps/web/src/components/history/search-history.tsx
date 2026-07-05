@@ -54,10 +54,11 @@ export function SearchHistory({ isSignedIn }: SearchHistoryProps) {
                   type="button"
                   className="underline underline-offset-4 hover:text-foreground"
                 >
-                  Sign in to keep your search history
+                  Sign in
                 </button>
               }
-            />
+            />{" "}
+            to keep your search history.
           </EmptyDescription>
         </EmptyHeader>
       </Empty>
