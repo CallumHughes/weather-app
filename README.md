@@ -1,6 +1,6 @@
 # weather-app
 
-A full-stack weather application: search for a city, see its current conditions, and — with an account — keep a searchable history and a reorderable board of favourite locations. The front-end is a Next.js app; all weather data flows through a Fastify REST API that fronts OpenWeather, caches responses in PostgreSQL, and owns authentication and persistence. Built as a full-stack developer tech assignment.
+A full-stack weather application: search for a city, see its current conditions, and — with an account — keep a searchable history and a reorderable board of favourite locations. The front-end is a Next.js app; all weather data flows through a Fastify REST API that fronts OpenWeather, caches responses in PostgreSQL, and owns authentication and persistence.
 
 ## Live deployment
 
