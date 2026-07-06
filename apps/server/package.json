@@ -20,6 +20,7 @@
     "@weather-app/auth": "workspace:*",
     "@weather-app/db": "workspace:*",
     "@weather-app/env": "workspace:*",
+    "@weather-app/schemas": "workspace:*",
     "better-auth": "catalog:",
     "dotenv": "catalog:",
     "evlog": "catalog:",

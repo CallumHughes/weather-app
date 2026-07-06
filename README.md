@@ -19,6 +19,7 @@ This project was created with [Better-T-Stack](https://github.com/AmanVarshney01
 - **Next.js** - Full-stack React framework
 - **TailwindCSS** - Utility-first CSS for rapid UI development
 - **Shared UI package** - shadcn/ui primitives live in `packages/ui`
+- **Shared API contract** - zod schemas in `packages/schemas` type and validate both the Fastify routes and the web client (and generate the OpenAPI docs)
 - **Fastify** - Fast, low-overhead web framework
 - **Node.js** - Runtime environment
 - **Prisma** - TypeScript-first ORM
@@ -169,6 +170,7 @@ weather-app/
 │   ├── auth/        # Authentication configuration & logic
 │   ├── db/          # Database schema & queries
 │   ├── env/         # Zod-validated environment schemas
+│   ├── schemas/     # Zod API contract shared by web and server
 │   └── config/      # Shared TypeScript config
 ```
 

@@ -2,74 +2,26 @@
  * Typed fetch wrapper for the backend API. The browser only ever calls
  * relative `/api/*` paths — the Next.js BFF rewrite forwards them to the
  * Fastify server, so no server URL (and no API key) ever reaches the client.
+ *
+ * Types and runtime validation both come from @weather-app/schemas — the same
+ * zod schemas the server validates and serializes every response with — so
+ * the client's view of the contract cannot drift from the server's. A drifted
+ * response fails the parse loudly instead of lying to TypeScript.
  */
 
-/** Current conditions — the `current` block of the weather DTO. */
-export interface CurrentWeather {
-  temperatureC: number;
-  feelsLikeC: number;
-  humidityPct: number;
-  windSpeedMs: number;
-  condition: {
-    id: number;
-    main: string;
-    description: string;
-    icon: string;
-  };
-  /** ISO 8601 timestamp of the upstream observation. */
-  observedAt: string;
-}
+import { type ErrorCode, errorEnvelopeSchema } from "@weather-app/schemas/errors";
+import type { FavouriteCreate, FavouriteItem } from "@weather-app/schemas/favourites";
+import { type HistoryItem, historyListResponseSchema } from "@weather-app/schemas/history";
+import {
+  type CurrentWeather,
+  type WeatherResponse,
+  weatherResponseSchema,
+} from "@weather-app/schemas/weather";
 
-export interface WeatherResponse {
-  location: {
-    name: string;
-    country: string;
-    state?: string;
-    lat: number;
-    lon: number;
-  };
-  current: CurrentWeather;
-}
-
-/** A search-history entry as returned by GET /api/v1/history. */
-export interface HistoryItem {
-  id: string;
-  /** The raw (trimmed) text the user searched for. */
-  query: string;
-  resolvedName: string;
-  country: string;
-  state?: string;
-  lat: number;
-  lon: number;
-  /** ISO 8601 timestamp of the (most recent) search. */
-  createdAt: string;
-}
+export type { CurrentWeather, FavouriteItem, HistoryItem, WeatherResponse };
 
 /** The resolved location of a weather result — the body of POST /api/v1/favourites. */
-export interface FavouriteLocationInput {
-  name: string;
-  country: string;
-  state?: string;
-  lat: number;
-  lon: number;
-}
-
-/** A favourite location as returned by GET /api/v1/favourites. */
-export interface FavouriteItem {
-  id: string;
-  name: string;
-  country: string;
-  state?: string;
-  lat: number;
-  lon: number;
-  /**
-   * Display position (new favourites are created at the top; reorders rewrite
-   * positions). Null only for rows saved before ordering existed.
-   */
-  sortOrder: number | null;
-  /** ISO 8601 timestamp of when the favourite was saved. */
-  createdAt: string;
-}
+export type FavouriteLocationInput = FavouriteCreate;
 
 /** A favourite plus its server-fetched conditions (null when the fetch failed). */
 export type FavouriteWithWeather = FavouriteItem & {
@@ -77,19 +29,12 @@ export type FavouriteWithWeather = FavouriteItem & {
   cache?: WeatherCacheStatus;
 };
 
-/** Error codes the API can return in its `{ error: { code, message } }` envelope. */
-export type ApiErrorCode =
-  | "VALIDATION_ERROR"
-  | "UNAUTHENTICATED"
-  | "NOT_FOUND"
-  | "LOCATION_NOT_FOUND"
-  | "ALREADY_FAVOURITE"
-  | "FAVOURITES_LIMIT_REACHED"
-  | "FAVOURITES_OUT_OF_SYNC"
-  | "UPSTREAM_ERROR"
-  | "UPSTREAM_TIMEOUT"
-  | "INTERNAL_ERROR"
-  | (string & {});
+/**
+ * Error codes the API can return in its `{ error: { code, message } }`
+ * envelope. The server's own union, kept open (`string & {}`) so a code added
+ * server-side degrades gracefully here instead of failing to type-check.
+ */
+export type ApiErrorCode = ErrorCode | (string & {});
 
 export class ApiError extends Error {
   readonly status: number;
@@ -107,20 +52,9 @@ export async function parseErrorEnvelope(response: Response): Promise<ApiError> 
   let code: ApiErrorCode = "INTERNAL_ERROR";
   let message = "Something went wrong.";
   try {
-    const body: unknown = await response.json();
-    if (
-      typeof body === "object" &&
-      body !== null &&
-      "error" in body &&
-      typeof body.error === "object" &&
-      body.error !== null &&
-      "code" in body.error &&
-      "message" in body.error &&
-      typeof body.error.code === "string" &&
-      typeof body.error.message === "string"
-    ) {
-      code = body.error.code;
-      message = body.error.message;
+    const parsed = errorEnvelopeSchema.safeParse(await response.json());
+    if (parsed.success) {
+      ({ code, message } = parsed.data.error);
     }
   } catch {
     // Non-JSON error body — keep the generic message.
@@ -134,7 +68,7 @@ export type WeatherCacheStatus = "HIT" | "MISS" | "STALE";
 /** The weather DTO plus client-side response metadata (cache verdict). */
 export type WeatherResult = WeatherResponse & { cache?: WeatherCacheStatus };
 
-function parseCacheHeader(value: string | null): WeatherCacheStatus | undefined {
+export function parseCacheHeader(value: string | null): WeatherCacheStatus | undefined {
   return value === "HIT" || value === "MISS" || value === "STALE" ? value : undefined;
 }
 
@@ -143,7 +77,7 @@ export async function getWeather(location: string): Promise<WeatherResult> {
   if (!response.ok) {
     throw await parseErrorEnvelope(response);
   }
-  const body = (await response.json()) as WeatherResponse;
+  const body = weatherResponseSchema.parse(await response.json());
   const cache = parseCacheHeader(response.headers.get("x-cache"));
   return cache === undefined ? body : { ...body, cache };
 }
@@ -158,7 +92,7 @@ export async function getHistory(): Promise<HistoryItem[]> {
   if (!response.ok) {
     throw await parseErrorEnvelope(response);
   }
-  return (await response.json()) as HistoryItem[];
+  return historyListResponseSchema.parse(await response.json());
 }
 
 export async function deleteHistoryItem(id: string): Promise<void> {
