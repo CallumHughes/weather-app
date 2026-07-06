@@ -1,213 +1,136 @@
 # weather-app
 
-This project was created with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack), a modern TypeScript stack that combines Next.js, Fastify, and more.
+A full-stack weather application: search for a city, see its current conditions, and — with an account — keep a searchable history and a reorderable board of favourite locations. The front-end is a Next.js app; all weather data flows through a Fastify REST API that fronts OpenWeather, caches responses in PostgreSQL, and owns authentication and persistence.
 
 ## Live deployment
 
 - Weather app: [https://weather-app-web-production.up.railway.app](https://weather-app-web-production.up.railway.app)
 - API docs: [https://weather-app-fumadocs-production.up.railway.app](https://weather-app-fumadocs-production.up.railway.app)
 
-## Documentation
-
-- [REQUIREMENTS.md](REQUIREMENTS.md) — MoSCoW-prioritised requirements and their current status
-- [ARCHITECTURE.md](ARCHITECTURE.md) — design decisions, trade-offs, assumptions, and future improvements
-- API documentation — OpenAPI generated from the route schemas, rendered by the Fumadocs app: [hosted docs](https://weather-app-fumadocs-production.up.railway.app), or locally with `pnpm nx dev fumadocs` → [http://localhost:4000/docs](http://localhost:4000/docs) (regenerate with `pnpm run docs:generate`)
-
 ## Features
 
-- **TypeScript** - For type safety and improved developer experience
-- **Next.js** - Full-stack React framework
-- **TailwindCSS** - Utility-first CSS for rapid UI development
-- **Shared UI package** - shadcn/ui primitives live in `packages/ui`
-- **Shared API contract** - zod schemas in `packages/schemas` type and validate both the Fastify routes and the web client (and generate the OpenAPI docs)
-- **Fastify** - Fast, low-overhead web framework
-- **Node.js** - Runtime environment
-- **Prisma** - TypeScript-first ORM
-- **PostgreSQL** - Database engine
-- **Authentication** - Better-Auth
-- **Nx** - Smart monorepo task orchestration and caching
-- **Biome** - Linting and formatting
-- **Husky** - Git hooks for code quality
+- **Location search** — free-text city search (`GET /api/v1/weather`), geocoded server-side; temperature, conditions, wind, and humidity for the resolved place
+- **Accounts** — email/password registration and sign-in (Better-Auth), first-party session cookies via a BFF proxy; history and favourites are per-user and protected
+- **Recent searches** — signed-in searches are recorded server-side; the panel shows the latest five, each re-runnable or deletable (signed-out searches are never stored)
+- **Favourite locations** — star a result to save it (capped at 20, duplicates rejected), shown as a board with live conditions and drag-to-reorder
+- **Server-side weather cache** — PostgreSQL TTL cache (10 min weather / 24 h geocoding) with stale-on-upstream-failure; the `x-cache: HIT | MISS | STALE` header shows what happened
+- **API hardening** — consistent `{ error: { code, message } }` envelope, zod validation on every endpoint, rate limiting (100 req/min per IP, 429 + `retry-after`), helmet security headers, structured request/error logging
+- **Health check** — `GET /health` reports 200 when the database is reachable, 503 when degraded; wired into the Docker Compose and Railway health checks
+- **Shared API contract** — one set of zod schemas (`packages/schemas`) types and validates both the Fastify routes and the web client, and generates the OpenAPI 3.1 docs (rendered by the Fumadocs app, with a drift test keeping spec and implementation in sync)
 
-## Getting Started
+The full requirement list (MoSCoW-prioritised, with status) is in [REQUIREMENTS.md](REQUIREMENTS.md).
 
-First, install the dependencies:
+## Documentation
+
+- [REQUIREMENTS.md](REQUIREMENTS.md) — requirements derived from the brief and their current status
+- [ARCHITECTURE.md](ARCHITECTURE.md) — system diagram, design decisions and trade-offs, technology justifications, assumptions, known bugs, future improvements, scaling approach
+- API documentation — rendered from the generated OpenAPI spec: [hosted docs](https://weather-app-fumadocs-production.up.railway.app), or locally with `pnpm nx dev fumadocs` → [http://localhost:4000/docs](http://localhost:4000/docs) (regenerate with `pnpm run docs:generate`)
+
+## Stack
+
+TypeScript end-to-end: Next.js (App Router) + Tailwind + shadcn/ui + TanStack Query on the front-end; Fastify + Prisma + PostgreSQL + Better-Auth on the back-end; shared zod schemas across both; Nx + pnpm workspaces for the monorepo, Biome for lint/format, Vitest for tests, Docker for packaging. Each choice is justified in [ARCHITECTURE.md → Technology choices](ARCHITECTURE.md#technology-choices).
+
+## Running locally
+
+Prerequisites: Node.js 24+, pnpm 10, Docker.
+
+### 1. Install dependencies
 
 ```bash
 pnpm install
 ```
 
-## Environment Variables
+### 2. Environment variables
 
-Each app reads its own `.env` file. Copy the committed examples and fill in the placeholders:
+Each app reads its own `.env` file. Copy the committed examples:
 
 ```bash
 cp apps/server/.env.example apps/server/.env
 cp apps/web/.env.example apps/web/.env
-cp apps/fumadocs/.env.example apps/fumadocs/.env   # only needed to run the API docs app
+cp apps/fumadocs/.env.example apps/fumadocs/.env   # only needed for the API docs app
 ```
 
-Only `apps/server/.env` has placeholders to replace: `BETTER_AUTH_SECRET` and `OPENWEATHER_API_KEY` (both below). All variables are validated at startup by the schemas in `packages/env` — the apps fail fast with a clear error if anything is missing or malformed (including unedited placeholders).
+Only `apps/server/.env` has placeholders to replace — everything is validated at startup by the schemas in `packages/env`, so the apps fail fast with a clear error if anything is missing or malformed (including unedited placeholders):
 
-### Generating `BETTER_AUTH_SECRET`
+- **`BETTER_AUTH_SECRET`** — signs session cookies; at least 32 characters, unique per environment:
 
-Better-Auth uses this secret to sign session cookies. It must be at least 32 characters and should be unique per environment (never reuse the local one in production):
+  ```bash
+  openssl rand -base64 32
+  ```
 
-```bash
-openssl rand -base64 32
-```
+- **`OPENWEATHER_API_KEY`** — weather data comes from [OpenWeather](https://openweathermap.org); create a key at [https://home.openweathermap.org/api_keys](https://home.openweathermap.org/api_keys) (the free tier covers everything this app uses). Newly created keys can take up to ~an hour to activate — until then, weather searches fail with an upstream error.
 
-If you don't have `openssl` available:
+### 3. Database
 
-```bash
-node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
-```
-
-Paste the output as the value of `BETTER_AUTH_SECRET` in `apps/server/.env`.
-
-### Getting `OPENWEATHER_API_KEY`
-
-Weather data comes from [OpenWeather](https://openweathermap.org). Create (or copy) an API key at [https://home.openweathermap.org/api_keys](https://home.openweathermap.org/api_keys) and paste it as the value of `OPENWEATHER_API_KEY` in `apps/server/.env`. The free tier covers everything this app uses (geocoding + current weather).
-
-Note: newly created OpenWeather keys can take a little while (up to ~an hour) to activate — until then the upstream API returns 401 and weather searches will fail with an upstream error.
-
-## Database Setup
-
-This project uses PostgreSQL with Prisma.
-
-1. Start a local PostgreSQL instance (uses Docker, matches the `DATABASE_URL` above):
+Start a local PostgreSQL (Docker, matches the committed `DATABASE_URL`), then apply migrations:
 
 ```bash
 pnpm run db:start
-```
-
-Alternatively, point `DATABASE_URL` in `apps/server/.env` at any PostgreSQL instance you already have.
-
-2. Apply the database migrations:
-
-```bash
 pnpm nx db:migrate @weather-app/db
 ```
 
-This runs `prisma migrate dev`: it applies all pending migrations from `packages/db/prisma/migrations` and regenerates the Prisma client. It is also the command to use when changing the schema during development, as it creates a new migration file. In production, migrations are applied with `prisma migrate deploy` (`db:migrate:deploy` in `packages/db`), which only applies existing migrations.
+`db:migrate` runs `prisma migrate dev` — it applies pending migrations from `packages/db/prisma/migrations`, regenerates the Prisma client, and is also the command for schema changes during development. Production uses `prisma migrate deploy` (the `db:migrate:deploy` target), which only applies existing migrations. To use an existing PostgreSQL instead, point `DATABASE_URL` in `apps/server/.env` at it.
 
-Then, run the development servers (web + API):
+### 4. Run the apps
 
 ```bash
 pnpm nx run-many -t dev
 ```
 
-Or start a single app with `pnpm nx dev web` / `pnpm nx dev server`.
+- Web app: [http://localhost:3001](http://localhost:3001)
+- API: [http://localhost:3000](http://localhost:3000)
 
-Open [http://localhost:3001](http://localhost:3001) in your browser to see the web application.
-The API is running at [http://localhost:3000](http://localhost:3000).
+Or start one app: `pnpm nx dev web` / `pnpm nx dev server` / `pnpm nx dev fumadocs`.
 
-Notes on features:
+### Docker Compose (full stack)
 
-- **Search history** requires an account — sign up / sign in from the header; the "Recent searches" panel on the home page then records your searches (click an entry to re-run it, or delete it). Signed-out searches are never stored.
-- **Weather caching**: repeated searches are served from a PostgreSQL TTL cache instead of hitting OpenWeather (10 min for weather, 24 h for geocoding). The `x-cache: HIT | MISS | STALE` response header on `/api/v1/weather` shows what happened; no extra setup or environment variables are needed.
-- **Health check**: `GET /health` on the API reports 200 `{ "status": "ok" }` when the database is reachable and 503 `{ "status": "degraded", "checks": { "database": "down" } }` when it is not. The docker-compose server healthcheck polls it (and it is the endpoint to configure as the Railway healthcheck path).
-- **Rate limiting**: the API allows 100 requests/minute per client IP (`/health` excluded); exceeding it returns 429 with a `retry-after` header.
-
-## UI Customization
-
-React web apps in this stack share shadcn/ui primitives through `packages/ui`.
-
-- Change design tokens and global styles in `packages/ui/src/styles/globals.css`
-- Update shared primitives in `packages/ui/src/components/*`
-- Adjust shadcn aliases or style config in `packages/ui/components.json` and `apps/web/components.json`
-
-### Add more shared components
-
-Run this from the project root to add more primitives to the shared UI package:
+The whole stack — web, API, PostgreSQL, and a one-shot migration service — runs with:
 
 ```bash
-npx shadcn@latest add accordion dialog popover sheet table -c packages/ui
+pnpm run docker:up      # build and start
+pnpm run docker:logs    # tail logs
+pnpm run docker:down    # stop
 ```
 
-Import shared components like this:
+Migrations are applied automatically after PostgreSQL is healthy and before the server starts, so a fresh `docker:up` brings up a working stack. Environment variables come from each app's `.env` file (public web variables are baked in at build time), overridden in `docker-compose.yml` for container networking.
 
-```tsx
-import { Button } from "@weather-app/ui/components/button";
-```
+## Commands
 
-### Add app-specific blocks
+Tasks are orchestrated by [Nx](https://nx.dev) with computation caching — unchanged projects replay cached results.
 
-If you want to add app-specific blocks instead of shared primitives, run the shadcn CLI from `apps/web`.
+| Task | Command |
+|------|---------|
+| Start all apps in dev mode | `pnpm nx run-many -t dev` |
+| Start one app | `pnpm nx dev web` / `pnpm nx dev server` / `pnpm nx dev fumadocs` |
+| Build all apps | `pnpm nx run-many -t build` |
+| Run all tests (Vitest) | `pnpm nx run-many -t test` |
+| Lint all projects (Biome, check-only) | `pnpm nx run-many -t lint` |
+| Type-check all projects | `pnpm nx run-many -t check-types` |
+| Create/apply DB migrations | `pnpm nx db:migrate @weather-app/db` |
+| Regenerate Prisma client/types | `pnpm nx db:generate @weather-app/db` |
+| Open Prisma Studio | `pnpm nx db:studio @weather-app/db` |
 
-## Deployment
+Non-Nx utilities: `pnpm run db:start` / `db:stop` (local PostgreSQL container), `pnpm run docker:*` (Compose stack), `pnpm run check` (Biome, applies fixes), `pnpm run docs:generate` (OpenAPI spec + docs pages).
 
-### Docker Compose
+Nx extras: `pnpm nx graph` visualises the project/task dependency graph; `pnpm nx show projects` lists all workspace projects.
 
-- Target: web + server + PostgreSQL
-- Config: `docker-compose.yml` (app Dockerfiles live in `apps/*/Dockerfile`)
-- Build images: pnpm run docker:build
-- Start: pnpm run docker:up
-- Logs: pnpm run docker:logs
-- Stop: pnpm run docker:down
+## Quality gates
 
-Database migrations run automatically: a one-shot `migrate` service applies pending Prisma migrations (`prisma migrate deploy`) after PostgreSQL is healthy and before the server starts, so a fresh `pnpm run docker:up` brings up a fully working stack.
+The husky pre-commit hook runs Biome lint and the full test suite across the workspace (`nx run-many -t lint test`); Nx caching keeps it fast, and the workspace root is itself an Nx project so root-level config files are linted too. Lint is check-only in the hook — run `pnpm run check` to apply fixes. This is a deliberate stopgap for CI; see the decision and its trade-offs in [ARCHITECTURE.md → Pre-commit quality gates](ARCHITECTURE.md#pre-commit-quality-gates-instead-of-ci-for-now). Initialize hooks after cloning with `pnpm run prepare`.
 
-Environment variables are read from each app's `.env` file (baked into web builds for public variables) and overridden in `docker-compose.yml` for container networking.
-
-## Git Hooks and Formatting
-
-- Initialize hooks: `pnpm run prepare`
-- Run checks: `pnpm run check`
-
-The pre-commit hook runs Biome lint and the full test suite across every project (`pnpm nx run-many -t lint test`). Both are Nx-managed targets, so Nx caching keeps this fast — unaffected projects replay cached results. The workspace root is itself an Nx project whose `lint` target covers the root-level config files, so the hook checks the whole repo. Lint is check-only in the hook; run `pnpm run check` to apply fixes. This acts as a lightweight CI alternative for now; see the decision in [ARCHITECTURE.md](ARCHITECTURE.md).
-
-## Project Structure
+## Project structure
 
 ```
 weather-app/
 ├── apps/
-│   ├── web/         # Frontend application (Next.js)
-│   ├── server/      # Backend API (Fastify)
-│   └── fumadocs/    # API documentation site (Fumadocs)
+│   ├── web/         # Front-end (Next.js) — proxies /api/* to the server
+│   ├── server/      # REST API (Fastify) — weather, auth, history, favourites
+│   └── fumadocs/    # API documentation site (Fumadocs, rendered OpenAPI)
 ├── packages/
-│   ├── ui/          # Shared shadcn/ui components and styles
-│   ├── auth/        # Authentication configuration & logic
-│   ├── db/          # Database schema & queries
-│   ├── env/         # Zod-validated environment schemas
 │   ├── schemas/     # Zod API contract shared by web and server
+│   ├── ui/          # Shared shadcn/ui components and styles
+│   ├── auth/        # Better-Auth configuration
+│   ├── db/          # Prisma schema, migrations, client
+│   ├── env/         # Zod-validated environment schemas
 │   └── config/      # Shared TypeScript config
 ```
-
-## Common Commands
-
-Tasks are orchestrated by [Nx](https://nx.dev) (with computation caching, so unchanged projects are not rebuilt/rechecked). The root `package.json` provides short `pnpm run` aliases for the most common ones.
-
-### Development
-
-| Task | Nx command | Alias |
-|------|------------|-------|
-| Start all apps in dev mode | `pnpm nx run-many -t dev` | `pnpm run dev` |
-| Start only the web app | `pnpm nx dev web` | `pnpm run dev:web` |
-| Start only the API server | `pnpm nx dev server` | `pnpm run dev:server` |
-| Start the API docs site ([http://localhost:4000](http://localhost:4000)) | `pnpm nx dev fumadocs` | — |
-| Regenerate API docs (OpenAPI spec + MDX) after API changes | — | `pnpm run docs:generate` |
-| Build all apps | `pnpm nx run-many -t build` | `pnpm run build` |
-| Type-check all projects | `pnpm nx run-many -t check-types` | `pnpm run check-types` |
-| Run all tests (Vitest) | `pnpm nx run-many -t test` | `pnpm run test` |
-| Lint all projects (Biome, check-only) | `pnpm nx run-many -t lint` | `pnpm run lint` |
-
-### Database
-
-| Task | Nx command | Alias |
-|------|------------|-------|
-| Create/apply migrations (`prisma migrate dev`) | `pnpm nx db:migrate @weather-app/db` | `pnpm run db:migrate` |
-| Generate Prisma client/types | `pnpm nx db:generate @weather-app/db` | `pnpm run db:generate` |
-| Open Prisma Studio | `pnpm nx db:studio @weather-app/db` | `pnpm run db:studio` |
-
-The local PostgreSQL container is managed with Docker Compose (not Nx): `pnpm run db:start` / `pnpm run db:stop`.
-
-### Other
-
-- `pnpm run check`: Run Biome formatting and linting
-- `pnpm run docker:build`: Build the Docker Compose images
-- `pnpm run docker:up`: Build and start the Docker Compose stack
-- `pnpm run docker:logs`: Tail logs from the Docker Compose stack
-- `pnpm run docker:down`: Stop the Docker Compose stack
-
-Nx extras: `pnpm nx graph` visualises the project/task dependency graph; `pnpm nx show projects` lists all workspace projects.
