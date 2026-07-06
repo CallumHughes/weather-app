@@ -1,0 +1,23 @@
+{
+  "name": "@weather-app/schemas",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./errors": "./src/errors.ts",
+    "./weather": "./src/weather.ts",
+    "./favourites": "./src/favourites.ts",
+    "./history": "./src/history.ts"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.14",
+    "@weather-app/config": "workspace:*",
+    "typescript": "catalog:"
+  },
+  "scripts": {
+    "lint": "biome check ."
+  }
+}

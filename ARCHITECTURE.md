@@ -40,16 +40,17 @@ graph LR
 Single repository with pnpm workspaces and Nx task orchestration:
 
 ```
-apps/web        Next.js front-end
-apps/server     Fastify API
-packages/db     Prisma schema, migrations, client
-packages/auth   Better-Auth configuration
-packages/env    Zod-validated environment schemas
-packages/ui     Shared shadcn/ui components
-packages/config Shared TS config
+apps/web         Next.js front-end
+apps/server      Fastify API
+packages/db      Prisma schema, migrations, client
+packages/auth    Better-Auth configuration
+packages/env     Zod-validated environment schemas
+packages/schemas Zod API contract (DTOs, error envelope) shared by both apps
+packages/ui      Shared shadcn/ui components
+packages/config  Shared TS config
 ```
 
-**Why a monorepo:** the front-end and back-end share types (API contracts, env schemas, auth types) with no publishing step; one set of tooling (Biome, Husky, TypeScript config); atomic commits across the stack; a single repo to clone and run. Nx adds task caching and orchestration (`nx run-many`) so builds and checks only re-run what changed.
+**Why a monorepo:** the front-end and back-end share code and types with no publishing step — the zod API contract in `packages/schemas` is imported by both apps (the server validates and serializes with it, the web client derives its types from it and validates responses against it), alongside env schemas and auth types; one set of tooling (Biome, Husky, TypeScript config); atomic commits across the stack; a single repo to clone and run. Nx adds task caching and orchestration (`nx run-many`) so builds and checks only re-run what changed.
 
 **Trade-off:** more upfront structure than a two-folder repo, and workspace tooling (pnpm + Nx) is something reviewers/new contributors must be comfortable with.
 
@@ -73,7 +74,7 @@ The project was scaffolded with [create-better-t-stack](https://github.com/AmanV
 | PostgreSQL | Database | Widely supported relational database with mature tooling; a single datastore also covers the TTL weather cache (justified against Redis under [Data and persistence](#data-and-persistence)) |
 | Prisma | ORM and migrations | Prior experience (over e.g. Drizzle); schema-first migrations and a generated typed client keep database management low-friction |
 | Better-Auth | Authentication (email/password, sessions) | Free and self-hosted, with a plugin ecosystem that slots into this stack; email/password + cookie sessions doesn't warrant a heavyweight managed solution |
-| Zod | Schema validation (env, API input) | One schema language shared across front-end and back-end (env, API input/output — and the OpenAPI spec is generated from the same schemas) |
+| Zod | Schema validation (env, API contract) | One schema language shared across front-end and back-end. The API contract lives in `packages/schemas`: the server validates and serializes every request/response with those schemas, the web client infers its types from them and parses responses against them (so a contract drift fails loudly on both sides), and the OpenAPI spec is generated from the same schemas. Env validation is zod too (`packages/env`) |
 | TanStack Form | Form state and validation | Modern, type-safe form state handling that validates with the same zod schemas |
 | TanStack Query | Server-state management on the front-end | Declarative fetch lifecycle (loading/error/success) with caching, request de-duplication, and selective retries out of the box — replaces hand-rolled effect/state plumbing and keeps data logic out of presentational components |
 | OpenWeather | External weather data provider | Clear API documentation and a large community/support ecosystem; free tier covers geocoding + current weather (see [Weather provider](#weather-provider-openweather)) |
@@ -170,7 +171,7 @@ The application currently connects with the database's main credentials. That is
 
 ### API documentation (OpenAPI generated from the route schemas)
 
-The OpenAPI 3.1 spec is **generated from the zod route schemas** — the same schemas that validate and serialize every request/response at runtime — via `@fastify/swagger` + `fastify-type-provider-zod`'s transforms (registered in `buildApp()`, config in `apps/server/src/lib/openapi.ts`). Docs therefore cannot drift from the implementation: the spec *is* the route contract.
+The OpenAPI 3.1 spec is **generated from the zod route schemas** — the same schemas that validate and serialize every request/response at runtime — via `@fastify/swagger` + `fastify-type-provider-zod`'s transforms (registered in `buildApp()`, config in `apps/server/src/lib/openapi.ts`). Docs therefore cannot drift from the implementation: the spec *is* the route contract. Those schemas live in the shared `packages/schemas` package, which the web client also imports for its types and response validation — spec, server, and client all read from one source.
 
 - **Committed spec + drift test standing in for CI**: `pnpm run docs:generate` writes the spec to `apps/fumadocs/openapi/weather-api.json` (built with in-memory fakes — no DB, network, or env needed) and regenerates the Fumadocs MDX pages from it. A drift test (`apps/server/src/openapi.test.ts`) rebuilds the spec in-memory and compares it against the committed file, so a schema change without regeneration fails the pre-commit suite — the same stopgap-for-CI role as the pre-commit hooks above.
 - **Rendered by Fumadocs, not by the server**: the Fastify app exposes no live docs UI; the docs app (`apps/fumadocs`, `pnpm nx dev fumadocs` on port 4000) renders the committed spec with `fumadocs-openapi`, plus hand-written pages for authentication, errors, and rate limits. `/api/auth/*` is excluded from the spec — it is Better-Auth's surface, documented by a hand-written page (Better-Auth's own OpenAPI plugin is the future path for generating those).

@@ -6,13 +6,16 @@
  */
 
 import { env } from "@weather-app/env/web";
+import { favouritesListResponseSchema } from "@weather-app/schemas/favourites";
+import { currentWeatherResponseSchema } from "@weather-app/schemas/weather";
 import { headers } from "next/headers";
 
-import type {
-  CurrentWeather,
-  FavouriteItem,
-  FavouriteWithWeather,
-  WeatherCacheStatus,
+import {
+  type CurrentWeather,
+  type FavouriteItem,
+  type FavouriteWithWeather,
+  parseCacheHeader,
+  type WeatherCacheStatus,
 } from "@/lib/api";
 
 export async function serverFetch(path: string, init?: RequestInit): Promise<Response> {
@@ -57,7 +60,7 @@ export async function getFavouritesServer(): Promise<FavouriteItem[]> {
     if (!response.ok) {
       return [];
     }
-    return (await response.json()) as FavouriteItem[];
+    return favouritesListResponseSchema.parse(await response.json());
   } catch {
     return [];
   }
@@ -87,12 +90,8 @@ export async function getCurrentWeatherByCoords(
     if (!response.ok) {
       return null;
     }
-    const body = (await response.json()) as { current: CurrentWeather };
-    const cacheHeader = response.headers.get("x-cache");
-    const cache =
-      cacheHeader === "HIT" || cacheHeader === "MISS" || cacheHeader === "STALE"
-        ? cacheHeader
-        : undefined;
+    const body = currentWeatherResponseSchema.parse(await response.json());
+    const cache = parseCacheHeader(response.headers.get("x-cache"));
     return cache === undefined ? { current: body.current } : { current: body.current, cache };
   } catch {
     return null;
