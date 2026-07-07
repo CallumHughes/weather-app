@@ -9,6 +9,11 @@ COPY . .
 RUN --mount=type=cache,target=/pnpm-store pnpm install --store-dir /pnpm-store
 
 ENV NODE_ENV=production
+# next.config evaluates rewrites() at build time and bakes them into
+# routes-manifest.json, so the /api/* BFF proxy target must exist NOW — a
+# runtime-only value leaves the proxy empty and every /api/* 404s.
+ARG INTERNAL_SERVER_URL=http://server:3000
+ENV INTERNAL_SERVER_URL=$INTERNAL_SERVER_URL
 RUN cd apps/web && pnpm run build
 
 FROM node:24-slim AS runner
