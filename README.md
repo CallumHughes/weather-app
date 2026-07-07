@@ -34,6 +34,13 @@ TypeScript end-to-end: Next.js (App Router) + Tailwind + shadcn/ui + TanStack Qu
 
 Prerequisites: Node.js 24+, pnpm 10, Docker.
 
+The repo pins the Node version in [`.nvmrc`](.nvmrc). With [nvm](https://github.com/nvm-sh/nvm) installed, run `nvm use` in the project root to switch to the right version (`nvm install` first if you don't have it):
+
+```bash
+nvm install   # first time only, installs Node 24
+nvm use
+```
+
 ### 1. Install dependencies
 
 ```bash
