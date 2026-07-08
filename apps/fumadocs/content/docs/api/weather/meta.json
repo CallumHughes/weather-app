@@ -1,0 +1,8 @@
+{
+  "title": "Weather",
+  "description": "Current weather lookups",
+  "pages": [
+    "getCurrentWeather",
+    "getCurrentWeatherByCoords"
+  ]
+}

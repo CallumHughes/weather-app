@@ -1,14 +1,11 @@
 {
   "title": "API Reference",
-  "description": "Generated from the OpenAPI spec — do not edit the pages by hand",
+  "description": "Generated from the OpenAPI spec",
   "defaultOpen": true,
   "pages": [
-    "getCurrentWeather",
-    "listSearchHistory",
-    "deleteSearchHistoryEntry",
-    "listFavourites",
-    "addFavourite",
-    "deleteFavourite",
-    "getHealth"
+    "weather",
+    "history",
+    "favourites",
+    "health"
   ]
 }

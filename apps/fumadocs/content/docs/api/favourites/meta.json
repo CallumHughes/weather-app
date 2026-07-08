@@ -1,0 +1,10 @@
+{
+  "title": "Favourites",
+  "description": "Per-user favourite locations (requires a session)",
+  "pages": [
+    "listFavourites",
+    "addFavourite",
+    "reorderFavourites",
+    "deleteFavourite"
+  ]
+}
